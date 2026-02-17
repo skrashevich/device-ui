@@ -82,6 +82,99 @@ constexpr lv_color_t colorMidGray = LV_COLOR_HEX(0x808080);
 constexpr lv_color_t colorDarkGray = LV_COLOR_HEX(0x303030);
 constexpr lv_color_t colorMesh = LV_COLOR_HEX(0x67ea94);
 
+#define KEYBOARD_CTRL_BUTTON_FLAGS                                                                                                 \
+    (LV_BUTTONMATRIX_CTRL_NO_REPEAT | LV_BUTTONMATRIX_CTRL_CLICK_TRIG | LV_BUTTONMATRIX_CTRL_CHECKED)
+#define KEYBOARD_CTRL(value) static_cast<lv_buttonmatrix_ctrl_t>(value)
+#define KEYBOARD_BTN(width) KEYBOARD_CTRL(LV_BUTTONMATRIX_CTRL_POPOVER | (width))
+#define KEYBOARD_BTN_CHECKED(width) KEYBOARD_CTRL(LV_BUTTONMATRIX_CTRL_CHECKED | (width))
+#define KEYBOARD_BTN_CHECKED_POPOVER(width)                                                                                        \
+    KEYBOARD_CTRL(LV_BUTTONMATRIX_CTRL_CHECKED | LV_BUTTONMATRIX_CTRL_POPOVER | (width))
+#define KEYBOARD_BTN_ACTION(width) KEYBOARD_CTRL(KEYBOARD_CTRL_BUTTON_FLAGS | (width))
+
+static const char *const kb_map_en_lower[] = {"1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[",
+                                               LV_SYMBOL_BACKSPACE, "\n", "ABC", "a", "s", "d", "f", "g", "h",
+                                               "j", "k", "l", ";", "'", LV_SYMBOL_NEW_LINE, "\n", "RU", "z", "x",
+                                               "c", "v", "b", "n", "m", ",", ".", "?", "-", "_", "\n",
+                                               LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+
+static const char *const kb_map_en_upper[] = {"1#", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[",
+                                               LV_SYMBOL_BACKSPACE, "\n", "abc", "A", "S", "D", "F", "G", "H",
+                                               "J", "K", "L", ";", "'", LV_SYMBOL_NEW_LINE, "\n", "RU", "Z", "X",
+                                               "C", "V", "B", "N", "M", ",", ".", "?", "-", "_", "\n",
+                                               LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+
+static const char *const kb_map_ru_lower[] = {
+    "1#", "\xD0\xB9", "\xD1\x86", "\xD1\x83", "\xD0\xBA", "\xD0\xB5", "\xD0\xBD", "\xD0\xB3", "\xD1\x88", "\xD1\x89",
+    "\xD0\xB7", "\xD1\x85", LV_SYMBOL_BACKSPACE, "\n", "ABC", "\xD1\x84", "\xD1\x8B", "\xD0\xB2", "\xD0\xB0", "\xD0\xBF",
+    "\xD1\x80", "\xD0\xBE", "\xD0\xBB", "\xD0\xB4", "\xD0\xB6", "\xD1\x8D", LV_SYMBOL_NEW_LINE, "\n", "EN", "\xD1\x91",
+    "\xD1\x8F", "\xD1\x87", "\xD1\x81", "\xD0\xBC", "\xD0\xB8", "\xD1\x82", "\xD1\x8C", "\xD0\xB1", "\xD1\x8E", "\xD1\x8A",
+    "-", "\n", LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+
+static const char *const kb_map_ru_upper[] = {
+    "1#", "\xD0\x99", "\xD0\xA6", "\xD0\xA3", "\xD0\x9A", "\xD0\x95", "\xD0\x9D", "\xD0\x93", "\xD0\xA8", "\xD0\xA9",
+    "\xD0\x97", "\xD0\xA5", LV_SYMBOL_BACKSPACE, "\n", "abc", "\xD0\xA4", "\xD0\xAB", "\xD0\x92", "\xD0\x90", "\xD0\x9F",
+    "\xD0\xA0", "\xD0\x9E", "\xD0\x9B", "\xD0\x94", "\xD0\x96", "\xD0\xAD", LV_SYMBOL_NEW_LINE, "\n", "EN", "\xD0\x81",
+    "\xD0\xAF", "\xD0\xA7", "\xD0\xA1", "\xD0\x9C", "\xD0\x98", "\xD0\xA2", "\xD0\xAC", "\xD0\x91", "\xD0\xAE", "\xD0\xAA",
+    "-", "\n", LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+
+static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
+    KEYBOARD_BTN_ACTION(5),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN(4),
+    KEYBOARD_BTN_CHECKED(7),
+
+    KEYBOARD_BTN_ACTION(6),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN_CHECKED(7),
+
+    KEYBOARD_BTN_ACTION(5),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN(3),
+    KEYBOARD_BTN_CHECKED_POPOVER(3),
+
+    KEYBOARD_BTN_ACTION(2),
+    KEYBOARD_BTN_CHECKED(2),
+    KEYBOARD_CTRL(6),
+    KEYBOARD_BTN_CHECKED(2),
+    KEYBOARD_BTN_ACTION(2),
+};
+
+static void configureKeyboardLayouts(lv_obj_t *keyboard)
+{
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER, kb_map_en_lower, kb_ctrl_map);
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER, kb_map_en_upper, kb_ctrl_map);
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_USER_1, kb_map_ru_lower, kb_ctrl_map);
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_USER_2, kb_map_ru_upper, kb_ctrl_map);
+}
+
 // children index of nodepanel lv objects (see addNode)
 enum NodePanelIdx {
     node_img_idx,
@@ -552,6 +645,10 @@ void TFTView_320x240::apply_hotfix(void)
     uint32_t h = lv_display_get_horizontal_resolution(displaydriver->getDisplay());
     uint32_t v = lv_display_get_vertical_resolution(displaydriver->getDisplay());
 
+    // Keyboard labels need a font with Cyrillic glyphs (RU layout).
+    lv_obj_set_style_text_font(objects.keyboard, &ui_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(objects.keyboard, &ui_font_montserrat_16, LV_PART_ITEMS | LV_STATE_DEFAULT);
+
     // resize buttons on larger display (assuming 480x480)
     if (h > 320 && v > 320) {
         lv_obj_t *button[] = {objects.home_button,     objects.nodes_button, objects.groups_button,
@@ -747,7 +844,9 @@ void TFTView_320x240::ui_events_init(void)
     lv_obj_add_event_cb(objects.alert_panel, this->ui_event_AlertButton, LV_EVENT_CLICKED, NULL);
 
     // keyboard
-    lv_obj_add_event_cb(objects.keyboard, ui_event_Keyboard, LV_EVENT_CLICKED, this);
+    configureKeyboardLayouts(objects.keyboard);
+    lv_obj_remove_event_cb(objects.keyboard, lv_keyboard_def_event_cb);
+    lv_obj_add_event_cb(objects.keyboard, ui_event_Keyboard, LV_EVENT_VALUE_CHANGED, this);
     lv_obj_add_event_cb(objects.keyboard_button_0, ui_event_KeyboardButton, LV_EVENT_CLICKED, (void *)0);
     lv_obj_add_event_cb(objects.keyboard_button_1, ui_event_KeyboardButton, LV_EVENT_CLICKED, (void *)1);
     lv_obj_add_event_cb(objects.keyboard_button_2, ui_event_KeyboardButton, LV_EVENT_CLICKED, (void *)2);
@@ -1635,40 +1734,50 @@ void TFTView_320x240::ui_event_KeyboardButton(lv_event_t *e)
 void TFTView_320x240::ui_event_Keyboard(lv_event_t *e)
 {
     lv_event_code_t event_code = lv_event_get_code(e);
-    if (event_code == LV_EVENT_CLICKED) {
+    if (event_code == LV_EVENT_VALUE_CHANGED) {
         lv_obj_t *kb = lv_event_get_target_obj(e);
         uint32_t btn_id = lv_keyboard_get_selected_button(kb);
+        const char *txt = lv_keyboard_get_button_text(kb, btn_id);
 
-        switch (btn_id) {
-        case 22: { // enter (filtered out by one-liner text input area, so we replace it)
-            // lv_obj_t *ta = lv_keyboard_get_textarea(kb);
-            // lv_textarea_add_char(ta, ' ');
-            // lv_textarea_add_char(ta, CR_REPLACEMENT);
-            break;
+        if (!txt) {
+            return;
         }
-        case 35: { // keyboard
-            lv_keyboard_set_popovers(objects.keyboard, !lv_keyboard_get_popovers(kb));
-            break;
+
+        lv_keyboard_mode_t mode = lv_keyboard_get_mode(kb);
+        bool ruLayout = mode == LV_KEYBOARD_MODE_USER_1 || mode == LV_KEYBOARD_MODE_USER_2;
+        bool upperLayout = mode == LV_KEYBOARD_MODE_TEXT_UPPER || mode == LV_KEYBOARD_MODE_USER_2;
+
+        if (strcmp(txt, "RU") == 0) {
+            lv_keyboard_set_mode(kb, upperLayout ? LV_KEYBOARD_MODE_USER_2 : LV_KEYBOARD_MODE_USER_1);
+            return;
         }
-        case 36: { // left
-            break;
+        if (strcmp(txt, "EN") == 0) {
+            lv_keyboard_set_mode(kb, upperLayout ? LV_KEYBOARD_MODE_TEXT_UPPER : LV_KEYBOARD_MODE_TEXT_LOWER);
+            return;
         }
-        case 38: { // right
-            break;
+        if (strcmp(txt, "ABC") == 0) {
+            lv_keyboard_set_mode(kb, ruLayout ? LV_KEYBOARD_MODE_USER_2 : LV_KEYBOARD_MODE_TEXT_UPPER);
+            return;
         }
-        case 39: { // checkmark
+        if (strcmp(txt, "abc") == 0) {
+            lv_keyboard_set_mode(kb, ruLayout ? LV_KEYBOARD_MODE_USER_1 : LV_KEYBOARD_MODE_TEXT_LOWER);
+            return;
+        }
+        if (strcmp(txt, LV_SYMBOL_KEYBOARD) == 0) {
+            lv_keyboard_set_popovers(kb, !lv_keyboard_get_popovers(kb));
+            return;
+        }
+        if (strcmp(txt, LV_SYMBOL_OK) == 0) {
             if (THIS->activePanel == objects.messages_panel) {
                 THIS->hideKeyboard(objects.messages_panel);
             } else {
                 lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
             }
             lv_group_focus_obj(objects.message_input_area);
-            break;
+            return;
         }
-        default:
-            break;
-            // const char *txt = lv_keyboard_get_button_text(kb, btn_id);
-        }
+
+        lv_keyboard_def_event_cb(e);
     }
 }
 
