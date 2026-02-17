@@ -3,6 +3,8 @@
 #include "util/ILog.h"
 #include <Arduino.h>
 #include <Wire.h>
+#include <cstdarg>
+#include <cstdio>
 
 #include "indev/lv_indev_private.h"
 
@@ -11,6 +13,22 @@ I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
 namespace {
 bool tdeckRussianLayoutEnabled = false;
 uint32_t tdeckLayoutChangeCounter = 0;
+
+#ifdef DEVICEUI_TDECK_KEYLOG
+void tdeckKeyLog(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    printf("[TDECK-KBD] ");
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
+#else
+void tdeckKeyLog(const char *, ...)
+{
+}
+#endif
 
 // T-Deck keyboard can emit modifier-like scan codes for left modifiers.
 // We track Alt+Shift press timing to toggle layout once per chord press.
@@ -229,17 +247,21 @@ bool handleLayoutToggleChord(uint32_t key)
         if (shiftMask) {
             tdeckLastLeftShiftMs = now;
             ILOG_DEBUG("T-Deck Shift modifier mask detected: 0x%02X", (unsigned int)key);
+            tdeckKeyLog("shift mask detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
         }
         if (altMask) {
             tdeckLastLeftAltMs = now;
             ILOG_DEBUG("T-Deck Alt modifier mask detected: 0x%02X", (unsigned int)key);
+            tdeckKeyLog("alt mask detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
         }
     } else if (isLeftShiftModifier(key)) {
         tdeckLastLeftShiftMs = now;
         ILOG_DEBUG("T-Deck Left Shift modifier detected: 0x%02X", (unsigned int)key);
+        tdeckKeyLog("left shift detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
     } else if (isLeftAltModifier(key)) {
         tdeckLastLeftAltMs = now;
         ILOG_DEBUG("T-Deck Left Alt modifier detected: 0x%02X", (unsigned int)key);
+        tdeckKeyLog("left alt detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
     } else {
         return false;
     }
@@ -251,6 +273,7 @@ bool handleLayoutToggleChord(uint32_t key)
         tdeckLastLayoutToggleMs = now;
         bool ru = TDeckKeyboardInputDriver::toggleRussianLayout();
         ILOG_INFO("T-Deck keyboard layout toggled by Left Alt+Shift: %s", ru ? "RU" : "EN");
+        tdeckKeyLog("layout toggled by Alt+Shift -> %s", ru ? "RU" : "EN");
     }
 
     // Consume modifier key events, they should not be forwarded as text/navigation keys.
@@ -362,13 +385,17 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
     uint8_t bytes = Wire.requestFrom(address, 1);
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
+        tdeckKeyLog("raw key from i2c addr=0x%02X: 0x%02X (%u)", (unsigned int)address, (unsigned int)keyValue,
+                    (unsigned int)keyValue);
         if (handleLayoutToggleChord(keyValue)) {
+            tdeckKeyLog("key consumed as modifier/chord: 0x%02X (%u)", (unsigned int)keyValue, (unsigned int)keyValue);
             keyValue = 0;
         }
         // ignore empty reads and keycode 224(E0, shift-0 on T-Deck) which causes internal issues
         if (keyValue != 0x00 && keyValue != 0xE0) {
             data->state = LV_INDEV_STATE_PRESSED;
             ILOG_DEBUG("key press value: %d", (int)keyValue);
+            tdeckKeyLog("forward key to lvgl: 0x%02X (%u)", (unsigned int)keyValue, (unsigned int)keyValue);
 
             switch (keyValue) {
             case 0x0D:
