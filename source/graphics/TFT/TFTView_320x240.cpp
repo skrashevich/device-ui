@@ -93,29 +93,29 @@ constexpr lv_color_t colorMesh = LV_COLOR_HEX(0x67ea94);
 
 static const char *const kb_map_en_lower[] = {"1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[",
                                                LV_SYMBOL_BACKSPACE, "\n", "ABC", "a", "s", "d", "f", "g", "h",
-                                               "j", "k", "l", ";", "'", LV_SYMBOL_NEW_LINE, "\n", "RU", "z", "x",
+                                               "j", "k", "l", ";", "'", LV_SYMBOL_NEW_LINE, "\n", "/", "z", "x",
                                                "c", "v", "b", "n", "m", ",", ".", "?", "-", "_", "\n",
-                                               LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+                                               LV_SYMBOL_KEYBOARD, "RU", ",", " ", ".", LV_SYMBOL_OK, ""};
 
 static const char *const kb_map_en_upper[] = {"1#", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[",
                                                LV_SYMBOL_BACKSPACE, "\n", "abc", "A", "S", "D", "F", "G", "H",
-                                               "J", "K", "L", ";", "'", LV_SYMBOL_NEW_LINE, "\n", "RU", "Z", "X",
+                                               "J", "K", "L", ";", "'", LV_SYMBOL_NEW_LINE, "\n", "/", "Z", "X",
                                                "C", "V", "B", "N", "M", ",", ".", "?", "-", "_", "\n",
-                                               LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+                                               LV_SYMBOL_KEYBOARD, "RU", ",", " ", ".", LV_SYMBOL_OK, ""};
 
 static const char *const kb_map_ru_lower[] = {
     "1#", "\xD0\xB9", "\xD1\x86", "\xD1\x83", "\xD0\xBA", "\xD0\xB5", "\xD0\xBD", "\xD0\xB3", "\xD1\x88", "\xD1\x89",
     "\xD0\xB7", "\xD1\x85", LV_SYMBOL_BACKSPACE, "\n", "ABC", "\xD1\x84", "\xD1\x8B", "\xD0\xB2", "\xD0\xB0", "\xD0\xBF",
-    "\xD1\x80", "\xD0\xBE", "\xD0\xBB", "\xD0\xB4", "\xD0\xB6", "\xD1\x8D", LV_SYMBOL_NEW_LINE, "\n", "EN", "\xD1\x91",
+    "\xD1\x80", "\xD0\xBE", "\xD0\xBB", "\xD0\xB4", "\xD0\xB6", "\xD1\x8D", LV_SYMBOL_NEW_LINE, "\n", "/", "\xD1\x91",
     "\xD1\x8F", "\xD1\x87", "\xD1\x81", "\xD0\xBC", "\xD0\xB8", "\xD1\x82", "\xD1\x8C", "\xD0\xB1", "\xD1\x8E", "\xD1\x8A",
-    "-", "\n", LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+    ".", "\n", LV_SYMBOL_KEYBOARD, "EN", ",", " ", "-", LV_SYMBOL_OK, ""};
 
 static const char *const kb_map_ru_upper[] = {
     "1#", "\xD0\x99", "\xD0\xA6", "\xD0\xA3", "\xD0\x9A", "\xD0\x95", "\xD0\x9D", "\xD0\x93", "\xD0\xA8", "\xD0\xA9",
     "\xD0\x97", "\xD0\xA5", LV_SYMBOL_BACKSPACE, "\n", "abc", "\xD0\xA4", "\xD0\xAB", "\xD0\x92", "\xD0\x90", "\xD0\x9F",
-    "\xD0\xA0", "\xD0\x9E", "\xD0\x9B", "\xD0\x94", "\xD0\x96", "\xD0\xAD", LV_SYMBOL_NEW_LINE, "\n", "EN", "\xD0\x81",
+    "\xD0\xA0", "\xD0\x9E", "\xD0\x9B", "\xD0\x94", "\xD0\x96", "\xD0\xAD", LV_SYMBOL_NEW_LINE, "\n", "/", "\xD0\x81",
     "\xD0\xAF", "\xD0\xA7", "\xD0\xA1", "\xD0\x9C", "\xD0\x98", "\xD0\xA2", "\xD0\xAC", "\xD0\x91", "\xD0\xAE", "\xD0\xAA",
-    "-", "\n", LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+    ".", "\n", LV_SYMBOL_KEYBOARD, "EN", ",", " ", "-", LV_SYMBOL_OK, ""};
 
 static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
     KEYBOARD_BTN_ACTION(5),
@@ -146,7 +146,7 @@ static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
     KEYBOARD_BTN(3),
     KEYBOARD_BTN_CHECKED(7),
 
-    KEYBOARD_BTN_ACTION(5),
+    KEYBOARD_BTN(3),
     KEYBOARD_BTN(3),
     KEYBOARD_BTN(3),
     KEYBOARD_BTN(3),
@@ -161,9 +161,10 @@ static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
     KEYBOARD_BTN_CHECKED_POPOVER(3),
 
     KEYBOARD_BTN_ACTION(2),
-    KEYBOARD_BTN_CHECKED(2),
-    KEYBOARD_CTRL(6),
-    KEYBOARD_BTN_CHECKED(2),
+    KEYBOARD_BTN_ACTION(2),
+    KEYBOARD_BTN(2),
+    KEYBOARD_CTRL(4),
+    KEYBOARD_BTN(2),
     KEYBOARD_BTN_ACTION(2),
 };
 
