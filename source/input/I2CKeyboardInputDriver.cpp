@@ -11,144 +11,169 @@ I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
 namespace {
 bool tdeckRussianLayoutEnabled = false;
 
-uint32_t mapLatinToRussianKey(uint32_t key)
+const char *mapLatinToRussianUtf8(uint32_t key)
 {
     switch (key) {
     case '`':
-        return 0x0451; // ё
+        return "\xD1\x91";
     case '~':
-        return 0x0401; // Ё
+        return "\xD0\x81";
     case 'q':
-        return 0x0439; // й
+        return "\xD0\xB9";
     case 'w':
-        return 0x0446; // ц
+        return "\xD1\x86";
     case 'e':
-        return 0x0443; // у
+        return "\xD1\x83";
     case 'r':
-        return 0x043A; // к
+        return "\xD0\xBA";
     case 't':
-        return 0x0435; // е
+        return "\xD0\xB5";
     case 'y':
-        return 0x043D; // н
+        return "\xD0\xBD";
     case 'u':
-        return 0x0433; // г
+        return "\xD0\xB3";
     case 'i':
-        return 0x0448; // ш
+        return "\xD1\x88";
     case 'o':
-        return 0x0449; // щ
+        return "\xD1\x89";
     case 'p':
-        return 0x0437; // з
+        return "\xD0\xB7";
     case '[':
-        return 0x0445; // х
+        return "\xD1\x85";
     case ']':
-        return 0x044A; // ъ
+        return "\xD1\x8A";
     case 'a':
-        return 0x0444; // ф
+        return "\xD1\x84";
     case 's':
-        return 0x044B; // ы
+        return "\xD1\x8B";
     case 'd':
-        return 0x0432; // в
+        return "\xD0\xB2";
     case 'f':
-        return 0x0430; // а
+        return "\xD0\xB0";
     case 'g':
-        return 0x043F; // п
+        return "\xD0\xBF";
     case 'h':
-        return 0x0440; // р
+        return "\xD1\x80";
     case 'j':
-        return 0x043E; // о
+        return "\xD0\xBE";
     case 'k':
-        return 0x043B; // л
+        return "\xD0\xBB";
     case 'l':
-        return 0x0434; // д
+        return "\xD0\xB4";
     case ';':
-        return 0x0436; // ж
+        return "\xD0\xB6";
     case '\'':
-        return 0x044D; // э
+        return "\xD1\x8D";
     case 'z':
-        return 0x044F; // я
+        return "\xD1\x8F";
     case 'x':
-        return 0x0447; // ч
+        return "\xD1\x87";
     case 'c':
-        return 0x0441; // с
+        return "\xD1\x81";
     case 'v':
-        return 0x043C; // м
+        return "\xD0\xBC";
     case 'b':
-        return 0x0438; // и
+        return "\xD0\xB8";
     case 'n':
-        return 0x0442; // т
+        return "\xD1\x82";
     case 'm':
-        return 0x044C; // ь
+        return "\xD1\x8C";
     case ',':
-        return 0x0431; // б
+        return "\xD0\xB1";
     case '.':
-        return 0x044E; // ю
+        return "\xD1\x8E";
     case 'Q':
-        return 0x0419; // Й
+        return "\xD0\x99";
     case 'W':
-        return 0x0426; // Ц
+        return "\xD0\xA6";
     case 'E':
-        return 0x0423; // У
+        return "\xD0\xA3";
     case 'R':
-        return 0x041A; // К
+        return "\xD0\x9A";
     case 'T':
-        return 0x0415; // Е
+        return "\xD0\x95";
     case 'Y':
-        return 0x041D; // Н
+        return "\xD0\x9D";
     case 'U':
-        return 0x0413; // Г
+        return "\xD0\x93";
     case 'I':
-        return 0x0428; // Ш
+        return "\xD0\xA8";
     case 'O':
-        return 0x0429; // Щ
+        return "\xD0\xA9";
     case 'P':
-        return 0x0417; // З
+        return "\xD0\x97";
     case '{':
-        return 0x0425; // Х
+        return "\xD0\xA5";
     case '}':
-        return 0x042A; // Ъ
+        return "\xD0\xAA";
     case 'A':
-        return 0x0424; // Ф
+        return "\xD0\xA4";
     case 'S':
-        return 0x042B; // Ы
+        return "\xD0\xAB";
     case 'D':
-        return 0x0412; // В
+        return "\xD0\x92";
     case 'F':
-        return 0x0410; // А
+        return "\xD0\x90";
     case 'G':
-        return 0x041F; // П
+        return "\xD0\x9F";
     case 'H':
-        return 0x0420; // Р
+        return "\xD0\xA0";
     case 'J':
-        return 0x041E; // О
+        return "\xD0\x9E";
     case 'K':
-        return 0x041B; // Л
+        return "\xD0\x9B";
     case 'L':
-        return 0x0414; // Д
+        return "\xD0\x94";
     case ':':
-        return 0x0416; // Ж
+        return "\xD0\x96";
     case '"':
-        return 0x042D; // Э
+        return "\xD0\xAD";
     case 'Z':
-        return 0x042F; // Я
+        return "\xD0\xAF";
     case 'X':
-        return 0x0427; // Ч
+        return "\xD0\xA7";
     case 'C':
-        return 0x0421; // С
+        return "\xD0\xA1";
     case 'V':
-        return 0x041C; // М
+        return "\xD0\x9C";
     case 'B':
-        return 0x0418; // И
+        return "\xD0\x98";
     case 'N':
-        return 0x0422; // Т
+        return "\xD0\xA2";
     case 'M':
-        return 0x042C; // Ь
+        return "\xD0\xAC";
     case '<':
-        return 0x0411; // Б
+        return "\xD0\x91";
     case '>':
-        return 0x042E; // Ю
+        return "\xD0\xAE";
     default:
-        return key;
+        return nullptr;
     }
+}
+
+bool insertIntoFocusedTextarea(const char *text)
+{
+#if LV_USE_TEXTAREA
+    lv_group_t *group = InputDriver::getInputGroup();
+    if (!group || !text) {
+        return false;
+    }
+
+    lv_obj_t *focused = lv_group_get_focused(group);
+    if (!focused) {
+        return false;
+    }
+
+    if (!lv_obj_check_type(focused, &lv_textarea_class)) {
+        return false;
+    }
+
+    lv_textarea_add_text(focused, text);
+    return true;
+#else
+    (void)text;
+    return false;
+#endif
 }
 } // namespace
 
@@ -258,7 +283,11 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
                 break;
             default:
                 if (isRussianLayoutEnabled()) {
-                    keyValue = mapLatinToRussianKey(keyValue);
+                    const char *ruChar = mapLatinToRussianUtf8(keyValue);
+                    if (ruChar && insertIntoFocusedTextarea(ruChar)) {
+                        keyValue = 0;
+                        data->state = LV_INDEV_STATE_RELEASED;
+                    }
                 }
                 break;
             }
