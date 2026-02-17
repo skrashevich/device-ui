@@ -11,6 +11,7 @@
 #include "graphics/map/MapPanel.h"
 #include "graphics/view/TFT/Themes.h"
 #include "images.h"
+#include "input/I2CKeyboardInputDriver.h"
 #include "input/InputDriver.h"
 #include "lv_i18n.h"
 #include "lvgl_private.h"
@@ -1766,10 +1767,12 @@ void TFTView_320x240::ui_event_Keyboard(lv_event_t *e)
         bool upperLayout = mode == LV_KEYBOARD_MODE_TEXT_UPPER || mode == LV_KEYBOARD_MODE_USER_2;
 
         if (strcmp(txt, "RU") == 0) {
+            TDeckKeyboardInputDriver::setRussianLayoutEnabled(true);
             lv_keyboard_set_mode(kb, upperLayout ? LV_KEYBOARD_MODE_USER_2 : LV_KEYBOARD_MODE_USER_1);
             return;
         }
         if (strcmp(txt, "EN") == 0) {
+            TDeckKeyboardInputDriver::setRussianLayoutEnabled(false);
             lv_keyboard_set_mode(kb, upperLayout ? LV_KEYBOARD_MODE_TEXT_UPPER : LV_KEYBOARD_MODE_TEXT_LOWER);
             return;
         }
@@ -3654,6 +3657,7 @@ meshtastic_Language TFTView_320x240::val2language(uint32_t val)
 void TFTView_320x240::setLocale(meshtastic_Language lang)
 {
     const char *locale = "en_US.UTF-8";
+    bool russianKeyboard = false;
     switch (lang) {
     case meshtastic_Language_ENGLISH:
         lv_i18n_set_locale("en");
@@ -3709,6 +3713,7 @@ void TFTView_320x240::setLocale(meshtastic_Language lang)
     case meshtastic_Language_RUSSIAN:
         lv_i18n_set_locale("ru");
         locale = "ru_RU.UTF-8";
+        russianKeyboard = true;
         break;
     case meshtastic_Language_GREEK:
         lv_i18n_set_locale("el");
@@ -3746,6 +3751,8 @@ void TFTView_320x240::setLocale(meshtastic_Language lang)
         ILOG_WARN("Language %d not implemented", lang);
         break;
     }
+
+    TDeckKeyboardInputDriver::setRussianLayoutEnabled(russianKeyboard);
 
 #if defined(LOCALE_SUPPORT)
     std::locale::global(std::locale(locale));

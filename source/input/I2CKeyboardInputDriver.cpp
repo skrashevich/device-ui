@@ -8,6 +8,150 @@
 
 I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
 
+namespace {
+bool tdeckRussianLayoutEnabled = false;
+
+uint32_t mapLatinToRussianKey(uint32_t key)
+{
+    switch (key) {
+    case '`':
+        return 0x0451; // ё
+    case '~':
+        return 0x0401; // Ё
+    case 'q':
+        return 0x0439; // й
+    case 'w':
+        return 0x0446; // ц
+    case 'e':
+        return 0x0443; // у
+    case 'r':
+        return 0x043A; // к
+    case 't':
+        return 0x0435; // е
+    case 'y':
+        return 0x043D; // н
+    case 'u':
+        return 0x0433; // г
+    case 'i':
+        return 0x0448; // ш
+    case 'o':
+        return 0x0449; // щ
+    case 'p':
+        return 0x0437; // з
+    case '[':
+        return 0x0445; // х
+    case ']':
+        return 0x044A; // ъ
+    case 'a':
+        return 0x0444; // ф
+    case 's':
+        return 0x044B; // ы
+    case 'd':
+        return 0x0432; // в
+    case 'f':
+        return 0x0430; // а
+    case 'g':
+        return 0x043F; // п
+    case 'h':
+        return 0x0440; // р
+    case 'j':
+        return 0x043E; // о
+    case 'k':
+        return 0x043B; // л
+    case 'l':
+        return 0x0434; // д
+    case ';':
+        return 0x0436; // ж
+    case '\'':
+        return 0x044D; // э
+    case 'z':
+        return 0x044F; // я
+    case 'x':
+        return 0x0447; // ч
+    case 'c':
+        return 0x0441; // с
+    case 'v':
+        return 0x043C; // м
+    case 'b':
+        return 0x0438; // и
+    case 'n':
+        return 0x0442; // т
+    case 'm':
+        return 0x044C; // ь
+    case ',':
+        return 0x0431; // б
+    case '.':
+        return 0x044E; // ю
+    case 'Q':
+        return 0x0419; // Й
+    case 'W':
+        return 0x0426; // Ц
+    case 'E':
+        return 0x0423; // У
+    case 'R':
+        return 0x041A; // К
+    case 'T':
+        return 0x0415; // Е
+    case 'Y':
+        return 0x041D; // Н
+    case 'U':
+        return 0x0413; // Г
+    case 'I':
+        return 0x0428; // Ш
+    case 'O':
+        return 0x0429; // Щ
+    case 'P':
+        return 0x0417; // З
+    case '{':
+        return 0x0425; // Х
+    case '}':
+        return 0x042A; // Ъ
+    case 'A':
+        return 0x0424; // Ф
+    case 'S':
+        return 0x042B; // Ы
+    case 'D':
+        return 0x0412; // В
+    case 'F':
+        return 0x0410; // А
+    case 'G':
+        return 0x041F; // П
+    case 'H':
+        return 0x0420; // Р
+    case 'J':
+        return 0x041E; // О
+    case 'K':
+        return 0x041B; // Л
+    case 'L':
+        return 0x0414; // Д
+    case ':':
+        return 0x0416; // Ж
+    case '"':
+        return 0x042D; // Э
+    case 'Z':
+        return 0x042F; // Я
+    case 'X':
+        return 0x0427; // Ч
+    case 'C':
+        return 0x0421; // С
+    case 'V':
+        return 0x041C; // М
+    case 'B':
+        return 0x0418; // И
+    case 'N':
+        return 0x0422; // Т
+    case 'M':
+        return 0x042C; // Ь
+    case '<':
+        return 0x0411; // Б
+    case '>':
+        return 0x042E; // Ю
+    default:
+        return key;
+    }
+}
+} // namespace
+
 I2CKeyboardInputDriver::I2CKeyboardInputDriver(void) {}
 
 void I2CKeyboardInputDriver::init(void)
@@ -50,6 +194,23 @@ TDeckKeyboardInputDriver::TDeckKeyboardInputDriver(uint8_t address)
     registerI2CKeyboard(this, "T-Deck Keyboard", address);
 }
 
+void TDeckKeyboardInputDriver::setRussianLayoutEnabled(bool enabled)
+{
+    tdeckRussianLayoutEnabled = enabled;
+    ILOG_INFO("T-Deck keyboard layout: %s", enabled ? "RU" : "EN");
+}
+
+bool TDeckKeyboardInputDriver::isRussianLayoutEnabled(void)
+{
+    return tdeckRussianLayoutEnabled;
+}
+
+bool TDeckKeyboardInputDriver::toggleRussianLayout(void)
+{
+    setRussianLayoutEnabled(!isRussianLayoutEnabled());
+    return isRussianLayoutEnabled();
+}
+
 /******************************************************************
     LV_KEY_NEXT: Focus on the next object
     LV_KEY_PREV: Focus on the previous object
@@ -80,12 +241,14 @@ TDeckKeyboardInputDriver::TDeckKeyboardInputDriver(uint8_t address)
 
 void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
-    char keyValue = 0;
+    (void)indev;
+    uint32_t keyValue = 0;
+    data->state = LV_INDEV_STATE_RELEASED;
     uint8_t bytes = Wire.requestFrom(address, 1);
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
         // ignore empty reads and keycode 224(E0, shift-0 on T-Deck) which causes internal issues
-        if (keyValue != (char)0x00 && keyValue != (char)0xE0) {
+        if (keyValue != 0x00 && keyValue != 0xE0) {
             data->state = LV_INDEV_STATE_PRESSED;
             ILOG_DEBUG("key press value: %d", (int)keyValue);
 
@@ -94,13 +257,16 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
                 keyValue = LV_KEY_ENTER;
                 break;
             default:
+                if (isRussianLayoutEnabled()) {
+                    keyValue = mapLatinToRussianKey(keyValue);
+                }
                 break;
             }
         } else {
-            data->state = LV_INDEV_STATE_RELEASED;
+            keyValue = 0;
         }
     }
-    data->key = (uint32_t)keyValue;
+    data->key = keyValue;
 }
 
 // ---------- TCA8418KeyboardInputDriver Implementation ----------
