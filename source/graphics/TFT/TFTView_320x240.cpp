@@ -175,6 +175,23 @@ static void configureKeyboardLayouts(lv_obj_t *keyboard)
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_USER_2, kb_map_ru_upper, kb_ctrl_map);
 }
 
+static const lv_font_t *getKeyboardFont(void)
+{
+#if LV_VERSION_CHECK(8, 2, 0) || LVGL_VERSION_MAJOR >= 9
+    static lv_font_t keyboardFont;
+    static bool initialized = false;
+
+    if (!initialized) {
+        keyboardFont = ui_font_montserrat_16;
+        keyboardFont.fallback = &lv_font_montserrat_16;
+        initialized = true;
+    }
+    return &keyboardFont;
+#else
+    return &ui_font_montserrat_16;
+#endif
+}
+
 // children index of nodepanel lv objects (see addNode)
 enum NodePanelIdx {
     node_img_idx,
@@ -645,9 +662,9 @@ void TFTView_320x240::apply_hotfix(void)
     uint32_t h = lv_display_get_horizontal_resolution(displaydriver->getDisplay());
     uint32_t v = lv_display_get_vertical_resolution(displaydriver->getDisplay());
 
-    // Keyboard labels need a font with Cyrillic glyphs (RU layout).
-    lv_obj_set_style_text_font(objects.keyboard, &ui_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(objects.keyboard, &ui_font_montserrat_16, LV_PART_ITEMS | LV_STATE_DEFAULT);
+    // Keyboard uses a Cyrillic-capable font with fallback for LVGL symbols.
+    lv_obj_set_style_text_font(objects.keyboard, getKeyboardFont(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(objects.keyboard, getKeyboardFont(), LV_PART_ITEMS | LV_STATE_DEFAULT);
 
     // resize buttons on larger display (assuming 480x480)
     if (h > 320 && v > 320) {
