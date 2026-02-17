@@ -177,6 +177,27 @@ static void configureKeyboardLayouts(lv_obj_t *keyboard)
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_USER_2, kb_map_ru_upper, kb_ctrl_map);
 }
 
+static void syncVirtualKeyboardLayout(lv_obj_t *keyboard)
+{
+    if (!keyboard) {
+        return;
+    }
+
+    static uint32_t appliedLayoutCounter = 0;
+    uint32_t currentLayoutCounter = TDeckKeyboardInputDriver::getLayoutChangeCounter();
+    if (currentLayoutCounter == appliedLayoutCounter) {
+        return;
+    }
+    appliedLayoutCounter = currentLayoutCounter;
+
+    lv_keyboard_mode_t mode = lv_keyboard_get_mode(keyboard);
+    bool upperLayout = mode == LV_KEYBOARD_MODE_TEXT_UPPER || mode == LV_KEYBOARD_MODE_USER_2;
+    bool russianLayout = TDeckKeyboardInputDriver::isRussianLayoutEnabled();
+    lv_keyboard_set_mode(keyboard, russianLayout ? (upperLayout ? LV_KEYBOARD_MODE_USER_2 : LV_KEYBOARD_MODE_USER_1)
+                                                 : (upperLayout ? LV_KEYBOARD_MODE_TEXT_UPPER
+                                                                : LV_KEYBOARD_MODE_TEXT_LOWER));
+}
+
 static const lv_font_t *getKeyboardFont(void)
 {
 #if LV_VERSION_CHECK(8, 2, 0) || LVGL_VERSION_MAJOR >= 9
@@ -7439,6 +7460,8 @@ void TFTView_320x240::task_handler(void)
     MeshtasticView::task_handler();
 
     if (screensInitialised) {
+        syncVirtualKeyboardLayout(objects.keyboard);
+
         if (map)
             map->task_handler();
 

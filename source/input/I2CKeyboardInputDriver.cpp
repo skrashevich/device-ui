@@ -10,6 +10,18 @@ I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
 
 namespace {
 bool tdeckRussianLayoutEnabled = false;
+uint32_t tdeckLayoutChangeCounter = 0;
+
+// T-Deck keyboard can emit modifier-like scan codes for left modifiers.
+// We track Alt+Shift press timing to toggle layout once per chord press.
+constexpr uint32_t TDECK_LEFT_SHIFT_KEY = 0xE1;
+constexpr uint32_t TDECK_LEFT_ALT_KEY = 0xE2;
+constexpr uint32_t TDECK_SHIFT_FALLBACK_KEY = 0xE0; // known T-Deck special code (see shift-0 comment below)
+constexpr uint32_t TDECK_LAYOUT_CHORD_WINDOW_MS = 400;
+constexpr uint32_t TDECK_LAYOUT_TOGGLE_COOLDOWN_MS = 700;
+uint32_t tdeckLastLeftShiftMs = 0;
+uint32_t tdeckLastLeftAltMs = 0;
+uint32_t tdeckLastLayoutToggleMs = 0;
 
 const char *mapLatinToRussianUtf8(uint32_t key)
 {
@@ -175,6 +187,42 @@ bool insertIntoFocusedTextarea(const char *text)
     return false;
 #endif
 }
+
+bool isLeftShiftModifier(uint32_t key)
+{
+    return key == TDECK_LEFT_SHIFT_KEY || key == TDECK_SHIFT_FALLBACK_KEY;
+}
+
+bool isLeftAltModifier(uint32_t key)
+{
+    return key == TDECK_LEFT_ALT_KEY;
+}
+
+bool handleLayoutToggleChord(uint32_t key)
+{
+    uint32_t now = millis();
+    if (isLeftShiftModifier(key)) {
+        tdeckLastLeftShiftMs = now;
+        ILOG_DEBUG("T-Deck Left Shift modifier detected: 0x%02X", (unsigned int)key);
+    } else if (isLeftAltModifier(key)) {
+        tdeckLastLeftAltMs = now;
+        ILOG_DEBUG("T-Deck Left Alt modifier detected: 0x%02X", (unsigned int)key);
+    } else {
+        return false;
+    }
+
+    uint32_t diff = (tdeckLastLeftShiftMs > tdeckLastLeftAltMs) ? (tdeckLastLeftShiftMs - tdeckLastLeftAltMs)
+                                                                : (tdeckLastLeftAltMs - tdeckLastLeftShiftMs);
+    if (tdeckLastLeftShiftMs && tdeckLastLeftAltMs && diff <= TDECK_LAYOUT_CHORD_WINDOW_MS &&
+        (now - tdeckLastLayoutToggleMs) > TDECK_LAYOUT_TOGGLE_COOLDOWN_MS) {
+        tdeckLastLayoutToggleMs = now;
+        bool ru = TDeckKeyboardInputDriver::toggleRussianLayout();
+        ILOG_INFO("T-Deck keyboard layout toggled by Left Alt+Shift: %s", ru ? "RU" : "EN");
+    }
+
+    // Consume modifier key events, they should not be forwarded as text/navigation keys.
+    return true;
+}
 } // namespace
 
 I2CKeyboardInputDriver::I2CKeyboardInputDriver(void) {}
@@ -221,7 +269,11 @@ TDeckKeyboardInputDriver::TDeckKeyboardInputDriver(uint8_t address)
 
 void TDeckKeyboardInputDriver::setRussianLayoutEnabled(bool enabled)
 {
+    if (tdeckRussianLayoutEnabled == enabled) {
+        return;
+    }
     tdeckRussianLayoutEnabled = enabled;
+    tdeckLayoutChangeCounter++;
     ILOG_INFO("T-Deck keyboard layout: %s", enabled ? "RU" : "EN");
 }
 
@@ -234,6 +286,11 @@ bool TDeckKeyboardInputDriver::toggleRussianLayout(void)
 {
     setRussianLayoutEnabled(!isRussianLayoutEnabled());
     return isRussianLayoutEnabled();
+}
+
+uint32_t TDeckKeyboardInputDriver::getLayoutChangeCounter(void)
+{
+    return tdeckLayoutChangeCounter;
 }
 
 /******************************************************************
@@ -272,6 +329,9 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
     uint8_t bytes = Wire.requestFrom(address, 1);
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
+        if (handleLayoutToggleChord(keyValue)) {
+            keyValue = 0;
+        }
         // ignore empty reads and keycode 224(E0, shift-0 on T-Deck) which causes internal issues
         if (keyValue != 0x00 && keyValue != 0xE0) {
             data->state = LV_INDEV_STATE_PRESSED;
