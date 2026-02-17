@@ -17,6 +17,11 @@ uint32_t tdeckLayoutChangeCounter = 0;
 constexpr uint32_t TDECK_LEFT_SHIFT_KEY = 0xE1;
 constexpr uint32_t TDECK_LEFT_ALT_KEY = 0xE2;
 constexpr uint32_t TDECK_SHIFT_FALLBACK_KEY = 0xE0; // known T-Deck special code (see shift-0 comment below)
+// Some keyboard firmwares report modifiers in HID-like 0x80..0x87 range.
+constexpr uint32_t TDECK_LEFT_SHIFT_HID_KEY = 0x81;
+constexpr uint32_t TDECK_LEFT_ALT_HID_KEY = 0x82;
+constexpr uint32_t TDECK_RIGHT_SHIFT_HID_KEY = 0x85;
+constexpr uint32_t TDECK_RIGHT_ALT_HID_KEY = 0x86;
 constexpr uint32_t TDECK_LAYOUT_CHORD_WINDOW_MS = 400;
 constexpr uint32_t TDECK_LAYOUT_TOGGLE_COOLDOWN_MS = 700;
 uint32_t tdeckLastLeftShiftMs = 0;
@@ -190,18 +195,46 @@ bool insertIntoFocusedTextarea(const char *text)
 
 bool isLeftShiftModifier(uint32_t key)
 {
-    return key == TDECK_LEFT_SHIFT_KEY || key == TDECK_SHIFT_FALLBACK_KEY;
+    return key == TDECK_LEFT_SHIFT_KEY || key == TDECK_SHIFT_FALLBACK_KEY || key == TDECK_LEFT_SHIFT_HID_KEY ||
+           key == TDECK_RIGHT_SHIFT_HID_KEY;
 }
 
 bool isLeftAltModifier(uint32_t key)
 {
-    return key == TDECK_LEFT_ALT_KEY;
+    return key == TDECK_LEFT_ALT_KEY || key == TDECK_LEFT_ALT_HID_KEY || key == TDECK_RIGHT_ALT_HID_KEY;
+}
+
+bool decodeHidModifierMask(uint32_t key, bool &shift, bool &alt)
+{
+    shift = false;
+    alt = false;
+
+    if (key < 0x80 || key > 0xFF) {
+        return false;
+    }
+
+    uint8_t mask = static_cast<uint8_t>(key & 0x7F);
+    // HID-like mask: bit1=LShift, bit2=LAlt, bit5=RShift, bit6=RAlt.
+    shift = (mask & 0x02) || (mask & 0x20);
+    alt = (mask & 0x04) || (mask & 0x40);
+    return shift || alt;
 }
 
 bool handleLayoutToggleChord(uint32_t key)
 {
     uint32_t now = millis();
-    if (isLeftShiftModifier(key)) {
+    bool shiftMask = false;
+    bool altMask = false;
+    if (decodeHidModifierMask(key, shiftMask, altMask)) {
+        if (shiftMask) {
+            tdeckLastLeftShiftMs = now;
+            ILOG_DEBUG("T-Deck Shift modifier mask detected: 0x%02X", (unsigned int)key);
+        }
+        if (altMask) {
+            tdeckLastLeftAltMs = now;
+            ILOG_DEBUG("T-Deck Alt modifier mask detected: 0x%02X", (unsigned int)key);
+        }
+    } else if (isLeftShiftModifier(key)) {
         tdeckLastLeftShiftMs = now;
         ILOG_DEBUG("T-Deck Left Shift modifier detected: 0x%02X", (unsigned int)key);
     } else if (isLeftAltModifier(key)) {
