@@ -1,8 +1,10 @@
 #pragma once
 
+#include "graphics/common/TelegramControlApi.h"
 #include "graphics/common/MeshtasticView.h"
 #include "meshtastic/clientonly.pb.h"
 #include <set>
+#include <string>
 
 class MapPanel;
 
@@ -95,6 +97,7 @@ class TFTView_320x240 : public MeshtasticView
         eModemPreset,
         eChannel,
         eWifi,
+        eTelegram,
         eLanguage,
         eScreenTimeout,
         eScreenLock,
@@ -214,6 +217,21 @@ class TFTView_320x240 : public MeshtasticView
     void updateTheme(void);
     void ui_events_init(void);
     void ui_set_active(lv_obj_t *b, lv_obj_t *p, lv_obj_t *tp);
+    void createTelegramSettingsUI(void);
+    void openTelegramSettings(void);
+    void closeTelegramSettings(void);
+    void reloadTelegramSettings(bool clearError = true);
+    void updateTelegramStatusLabel(const TelegramControlSnapshot &snapshot);
+    void setTelegramInputEnabled(bool enabled);
+    void showTelegramFieldError(const char *message);
+    void clearTelegramFieldError(void);
+    bool buildTelegramPatch(TelegramControlPatch &patch, std::string &errorMessage);
+    static uint32_t telegramDirectionToUiIndex(TelegramDirectionMode mode);
+    static TelegramDirectionMode uiIndexToTelegramDirection(uint32_t index);
+    static std::string trimString(const std::string &value);
+    static bool parseInt64String(const std::string &value);
+    bool parseUnsignedInRange(const std::string &value, uint32_t minValue, uint32_t maxValue, uint32_t &parsed) const;
+    bool validateChannelsCsv(const std::string &value) const;
     void showKeyboard(lv_obj_t *textArea);
     void hideKeyboard(lv_obj_t *panel);
     lv_obj_t *showQrCode(lv_obj_t *parent, const char *data);
@@ -324,6 +342,13 @@ class TFTView_320x240 : public MeshtasticView
     static void ui_event_screen_lock_button(lv_event_t *e);
     static void ui_event_input_button(lv_event_t *e);
     static void ui_event_alert_button(lv_event_t *e);
+    static void ui_event_telegram_button(lv_event_t *e);
+    static void ui_event_telegram_enabled_switch(lv_event_t *e);
+    static void ui_event_telegram_token_switch(lv_event_t *e);
+    static void ui_event_telegram_save(lv_event_t *e);
+    static void ui_event_telegram_reload(lv_event_t *e);
+    static void ui_event_telegram_back(lv_event_t *e);
+    static void ui_event_telegram_textarea(lv_event_t *e);
     static void ui_event_backup_button(lv_event_t *e);
     static void ui_event_reset_button(lv_event_t *e);
     static void ui_event_reboot_button(lv_event_t *e);
@@ -423,10 +448,29 @@ class TFTView_320x240 : public MeshtasticView
     uint32_t selectedHops;                                // remember selected choice
     bool chooseNodeSignalScanner;                         // chose a target node for signal scanner
     bool chooseNodeTraceRoute;                            // chose a target node for trace route
+    bool telegramUpdatingForm = false;
     char old_val1_scratch[64], old_val2_scratch[64];      // temporary scratch buffers for settings strings
     std::array<lv_obj_t *, c_max_channels> ch_label;      // indexable label list for settings
     meshtastic_Channel *channel_scratch;                  // temporary scratch copy of channel db
     lv_obj_t *qr;                                         // qr code
+    lv_obj_t *telegram_settings_button = nullptr;
+    lv_obj_t *telegram_settings_label = nullptr;
+    lv_obj_t *telegram_panel = nullptr;
+    lv_obj_t *telegram_enabled_switch = nullptr;
+    lv_obj_t *telegram_direction_dropdown = nullptr;
+    lv_obj_t *telegram_status_label = nullptr;
+    lv_obj_t *telegram_chat_id_textarea = nullptr;
+    lv_obj_t *telegram_channels_textarea = nullptr;
+    lv_obj_t *telegram_token_switch = nullptr;
+    lv_obj_t *telegram_token_textarea = nullptr;
+    lv_obj_t *telegram_poll_interval_textarea = nullptr;
+    lv_obj_t *telegram_long_poll_timeout_textarea = nullptr;
+    lv_obj_t *telegram_send_interval_textarea = nullptr;
+    lv_obj_t *telegram_field_error_label = nullptr;
+    lv_obj_t *telegram_save_button = nullptr;
+    lv_obj_t *telegram_reload_button = nullptr;
+    lv_obj_t *telegram_back_button = nullptr;
+    TelegramControlSnapshot telegramSnapshot{};
     MapPanel *map = nullptr;                              // map
     std::unordered_map<uint32_t, lv_obj_t *> nodeObjects; // nodeObjects displayed on map
     // extended default device profile struct with additional required data

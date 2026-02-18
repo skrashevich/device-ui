@@ -19,8 +19,12 @@
 #include "util/FileLoader.h"
 #include "util/ILog.h"
 #include <algorithm>
+#include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iomanip>
 #include <list>
@@ -81,6 +85,13 @@ constexpr lv_color_t colorLightGray = LV_COLOR_HEX(0xAAFBFF);
 constexpr lv_color_t colorMidGray = LV_COLOR_HEX(0x808080);
 constexpr lv_color_t colorDarkGray = LV_COLOR_HEX(0x303030);
 constexpr lv_color_t colorMesh = LV_COLOR_HEX(0x67ea94);
+
+constexpr uint32_t telegramPollMin = 200;
+constexpr uint32_t telegramPollMax = 60000;
+constexpr uint32_t telegramSendMin = 200;
+constexpr uint32_t telegramSendMax = 10000;
+constexpr uint32_t telegramLongPollMin = 0;
+constexpr uint32_t telegramLongPollMax = 60;
 
 // children index of nodepanel lv objects (see addNode)
 enum NodePanelIdx {
@@ -366,6 +377,7 @@ void TFTView_320x240::init_screens(void)
     channelGroup = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     ui_set_active(objects.home_button, objects.home_panel, objects.top_panel);
     ui_events_init();
+    createTelegramSettingsUI();
 
     // load main screen
     lv_screen_load_anim(objects.main_screen, LV_SCR_LOAD_ANIM_NONE, 300, 0, false);
@@ -508,6 +520,533 @@ void TFTView_320x240::ui_set_active(lv_obj_t *b, lv_obj_t *p, lv_obj_t *tp)
 
     lv_obj_add_flag(objects.keyboard, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(objects.msg_popup_panel, LV_OBJ_FLAG_HIDDEN);
+}
+
+std::string TFTView_320x240::trimString(const std::string &value)
+{
+    size_t start = 0;
+    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
+        start++;
+    }
+
+    size_t end = value.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+        end--;
+    }
+
+    return value.substr(start, end - start);
+}
+
+bool TFTView_320x240::parseInt64String(const std::string &value)
+{
+    if (value.empty())
+        return false;
+
+    errno = 0;
+    char *end = nullptr;
+    (void)strtoll(value.c_str(), &end, 10);
+    if (errno == ERANGE)
+        return false;
+    if (end == value.c_str() || end == nullptr || *end != '\0')
+        return false;
+
+    return true;
+}
+
+bool TFTView_320x240::parseUnsignedInRange(const std::string &value, uint32_t minValue, uint32_t maxValue, uint32_t &parsed) const
+{
+    if (value.empty())
+        return false;
+
+    errno = 0;
+    char *end = nullptr;
+    unsigned long number = strtoul(value.c_str(), &end, 10);
+    if (errno == ERANGE)
+        return false;
+    if (end == value.c_str() || end == nullptr || *end != '\0')
+        return false;
+    if (number < minValue || number > maxValue)
+        return false;
+
+    parsed = static_cast<uint32_t>(number);
+    return true;
+}
+
+bool TFTView_320x240::validateChannelsCsv(const std::string &value) const
+{
+    const std::string normalized = trimString(value);
+    if (normalized.empty())
+        return true;
+
+    size_t offset = 0;
+    while (offset <= normalized.size()) {
+        size_t comma = normalized.find(',', offset);
+        std::string token = trimString(normalized.substr(offset, comma == std::string::npos ? std::string::npos : comma - offset));
+
+        uint32_t channel = 0;
+        if (!parseUnsignedInRange(token, 0, c_max_channels - 1, channel))
+            return false;
+
+        if (comma == std::string::npos)
+            break;
+        offset = comma + 1;
+    }
+
+    return true;
+}
+
+uint32_t TFTView_320x240::telegramDirectionToUiIndex(TelegramDirectionMode mode)
+{
+    switch (mode) {
+    case TelegramDirectionMode::BOTH:
+        return 0;
+    case TelegramDirectionMode::MESH_TO_TELEGRAM:
+        return 1;
+    case TelegramDirectionMode::TELEGRAM_TO_MESH:
+        return 2;
+    default:
+        return 0;
+    }
+}
+
+TelegramDirectionMode TFTView_320x240::uiIndexToTelegramDirection(uint32_t index)
+{
+    switch (index) {
+    case 1:
+        return TelegramDirectionMode::MESH_TO_TELEGRAM;
+    case 2:
+        return TelegramDirectionMode::TELEGRAM_TO_MESH;
+    case 0:
+    default:
+        return TelegramDirectionMode::BOTH;
+    }
+}
+
+void TFTView_320x240::showTelegramFieldError(const char *message)
+{
+    if (telegram_field_error_label == nullptr)
+        return;
+
+    if (message != nullptr && message[0] != '\0') {
+        lv_label_set_text(telegram_field_error_label, message);
+        lv_obj_clear_flag(telegram_field_error_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_label_set_text(telegram_field_error_label, "");
+        lv_obj_add_flag(telegram_field_error_label, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void TFTView_320x240::clearTelegramFieldError(void)
+{
+    showTelegramFieldError(nullptr);
+}
+
+void TFTView_320x240::updateTelegramStatusLabel(const TelegramControlSnapshot &snapshot)
+{
+    if (telegram_status_label == nullptr)
+        return;
+
+    if (!snapshot.featureAvailable) {
+        lv_label_set_text(telegram_status_label, _("Telegram not available in this build"));
+        return;
+    }
+
+    const char *state = _("disabled");
+    if (snapshot.enabled && !snapshot.configured) {
+        state = _("Enabled, not configured");
+    } else if (snapshot.enabled && snapshot.running) {
+        state = _("running");
+    } else if (snapshot.enabled) {
+        state = _("wait_wifi");
+    }
+
+    const char *direction = "both";
+    if (snapshot.directionMode == TelegramDirectionMode::MESH_TO_TELEGRAM) {
+        direction = "mesh_to_telegram";
+    } else if (snapshot.directionMode == TelegramDirectionMode::TELEGRAM_TO_MESH) {
+        direction = "telegram_to_mesh";
+    }
+
+    char buf[224];
+    lv_snprintf(buf, sizeof(buf),
+                "state: %s\ndirection: %s\nconfigured: %s\nwifi: %s\nqueue: %u/%u\ntoken: %s\nchat_id: %s",
+                state,
+                direction,
+                snapshot.configured ? "yes" : "no",
+                snapshot.wifiConnected ? "connected" : "disconnected",
+                snapshot.queueUsed,
+                snapshot.queueCapacity,
+                snapshot.hasToken ? "set" : "missing",
+                snapshot.hasChatId ? "set" : "missing");
+    lv_label_set_text(telegram_status_label, buf);
+}
+
+void TFTView_320x240::setTelegramInputEnabled(bool enabled)
+{
+    auto setState = [enabled](lv_obj_t *obj) {
+        if (obj == nullptr)
+            return;
+        if (enabled)
+            lv_obj_clear_state(obj, LV_STATE_DISABLED);
+        else
+            lv_obj_add_state(obj, LV_STATE_DISABLED);
+    };
+
+    setState(telegram_enabled_switch);
+    setState(telegram_direction_dropdown);
+    setState(telegram_chat_id_textarea);
+    setState(telegram_channels_textarea);
+    setState(telegram_token_switch);
+    setState(telegram_poll_interval_textarea);
+    setState(telegram_long_poll_timeout_textarea);
+    setState(telegram_send_interval_textarea);
+    setState(telegram_save_button);
+
+    if (telegram_token_textarea != nullptr) {
+        if (enabled && lv_obj_has_state(telegram_token_switch, LV_STATE_CHECKED))
+            lv_obj_clear_state(telegram_token_textarea, LV_STATE_DISABLED);
+        else
+            lv_obj_add_state(telegram_token_textarea, LV_STATE_DISABLED);
+    }
+}
+
+bool TFTView_320x240::buildTelegramPatch(TelegramControlPatch &patch, std::string &errorMessage)
+{
+    errorMessage.clear();
+
+    const bool enabled = telegram_enabled_switch != nullptr && lv_obj_has_state(telegram_enabled_switch, LV_STATE_CHECKED);
+    if (enabled != telegramSnapshot.enabled) {
+        patch.hasEnabled = true;
+        patch.enabled = enabled;
+    }
+
+    const TelegramDirectionMode directionMode = uiIndexToTelegramDirection(lv_dropdown_get_selected(telegram_direction_dropdown));
+    if (directionMode != telegramSnapshot.directionMode) {
+        patch.hasDirectionMode = true;
+        patch.directionMode = directionMode;
+    }
+
+    const std::string chatId = trimString(lv_textarea_get_text(telegram_chat_id_textarea));
+    if (!chatId.empty() && !parseInt64String(chatId)) {
+        errorMessage = "Chat ID must be a valid integer";
+        return false;
+    }
+    if (chatId != telegramSnapshot.chatId) {
+        patch.hasChatId = true;
+        patch.chatId = chatId;
+    }
+
+    const std::string channels = trimString(lv_textarea_get_text(telegram_channels_textarea));
+    if (!validateChannelsCsv(channels)) {
+        errorMessage = "Channels must be empty or CSV indexes 0..7";
+        return false;
+    }
+    if (channels != trimString(telegramSnapshot.channels)) {
+        patch.hasChannels = true;
+        patch.channels = channels;
+    }
+
+    if (lv_obj_has_state(telegram_token_switch, LV_STATE_CHECKED)) {
+        patch.hasToken = true;
+        patch.token = trimString(lv_textarea_get_text(telegram_token_textarea));
+    }
+
+    uint32_t pollIntervalMs = 0;
+    const std::string pollText = trimString(lv_textarea_get_text(telegram_poll_interval_textarea));
+    if (!parseUnsignedInRange(pollText, telegramPollMin, telegramPollMax, pollIntervalMs)) {
+        errorMessage = "Poll interval must be 200..60000 ms";
+        return false;
+    }
+    if (pollIntervalMs != telegramSnapshot.pollIntervalMs) {
+        patch.hasPollIntervalMs = true;
+        patch.pollIntervalMs = pollIntervalMs;
+    }
+
+    uint32_t longPollTimeoutSec = 0;
+    const std::string longPollText = trimString(lv_textarea_get_text(telegram_long_poll_timeout_textarea));
+    if (!parseUnsignedInRange(longPollText, telegramLongPollMin, telegramLongPollMax, longPollTimeoutSec)) {
+        errorMessage = "Long poll timeout must be 0..60 sec";
+        return false;
+    }
+    if (longPollTimeoutSec != telegramSnapshot.longPollTimeoutSec) {
+        patch.hasLongPollTimeoutSec = true;
+        patch.longPollTimeoutSec = longPollTimeoutSec;
+    }
+
+    uint32_t sendIntervalMs = 0;
+    const std::string sendText = trimString(lv_textarea_get_text(telegram_send_interval_textarea));
+    if (!parseUnsignedInRange(sendText, telegramSendMin, telegramSendMax, sendIntervalMs)) {
+        errorMessage = "Send interval must be 200..10000 ms";
+        return false;
+    }
+    if (sendIntervalMs != telegramSnapshot.sendIntervalMs) {
+        patch.hasSendIntervalMs = true;
+        patch.sendIntervalMs = sendIntervalMs;
+    }
+
+    return true;
+}
+
+void TFTView_320x240::reloadTelegramSettings(bool clearError)
+{
+    telegramSnapshot = telegramGetControlSnapshot();
+    telegramUpdatingForm = true;
+
+    if (telegram_enabled_switch != nullptr) {
+        if (telegramSnapshot.enabled)
+            lv_obj_add_state(telegram_enabled_switch, LV_STATE_CHECKED);
+        else
+            lv_obj_remove_state(telegram_enabled_switch, LV_STATE_CHECKED);
+    }
+
+    if (telegram_direction_dropdown != nullptr) {
+        lv_dropdown_set_selected(telegram_direction_dropdown, telegramDirectionToUiIndex(telegramSnapshot.directionMode));
+    }
+
+    lv_textarea_set_text(telegram_chat_id_textarea, telegramSnapshot.chatId.c_str());
+    lv_textarea_set_text(telegram_channels_textarea, telegramSnapshot.channels.c_str());
+    lv_textarea_set_text(telegram_token_textarea, "");
+    lv_obj_remove_state(telegram_token_switch, LV_STATE_CHECKED);
+
+    char buf[24];
+    lv_snprintf(buf, sizeof(buf), "%u", telegramSnapshot.pollIntervalMs);
+    lv_textarea_set_text(telegram_poll_interval_textarea, buf);
+    lv_snprintf(buf, sizeof(buf), "%u", telegramSnapshot.longPollTimeoutSec);
+    lv_textarea_set_text(telegram_long_poll_timeout_textarea, buf);
+    lv_snprintf(buf, sizeof(buf), "%u", telegramSnapshot.sendIntervalMs);
+    lv_textarea_set_text(telegram_send_interval_textarea, buf);
+
+    setTelegramInputEnabled(telegramSnapshot.featureAvailable);
+    updateTelegramStatusLabel(telegramSnapshot);
+    telegramUpdatingForm = false;
+
+    if (clearError)
+        clearTelegramFieldError();
+}
+
+void TFTView_320x240::openTelegramSettings(void)
+{
+    if (activeSettings != eNone)
+        return;
+
+    if (telegram_panel == nullptr) {
+        createTelegramSettingsUI();
+    }
+
+    reloadTelegramSettings(true);
+    lv_obj_clear_flag(telegram_panel, LV_OBJ_FLAG_HIDDEN);
+
+    disablePanel(objects.controller_panel);
+    disablePanel(objects.tab_page_basic_settings);
+    activeSettings = eTelegram;
+
+    if (telegramSnapshot.featureAvailable)
+        lv_group_focus_obj(telegram_enabled_switch);
+    else
+        lv_group_focus_obj(telegram_back_button);
+}
+
+void TFTView_320x240::closeTelegramSettings(void)
+{
+    if (telegram_panel == nullptr)
+        return;
+
+    lv_obj_add_flag(telegram_panel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(objects.keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_textarea_set_text(telegram_token_textarea, "");
+
+    enablePanel(objects.controller_panel);
+    enablePanel(objects.tab_page_basic_settings);
+    activeSettings = eNone;
+
+    if (telegram_settings_button != nullptr)
+        lv_group_focus_obj(telegram_settings_button);
+}
+
+void TFTView_320x240::createTelegramSettingsUI(void)
+{
+    if (telegram_settings_button != nullptr)
+        return;
+
+    telegram_settings_button = lv_btn_create(objects.tab_page_basic_settings);
+    lv_obj_set_size(telegram_settings_button, LV_PCT(95), 30);
+    add_style_settings_button_style(telegram_settings_button);
+    lv_obj_set_style_align(telegram_settings_button, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(telegram_settings_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(telegram_settings_button, lv_color_hex(0xff4db270), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(telegram_settings_button, lv_color_hex(0xff015114), LV_PART_MAIN | LV_STATE_PRESSED);
+
+    telegram_settings_label = lv_label_create(telegram_settings_button);
+    lv_obj_set_size(telegram_settings_label, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_label_set_long_mode(telegram_settings_label, LV_LABEL_LONG_DOT);
+    lv_label_set_text(telegram_settings_label, _("Connectivity: Telegram"));
+    lv_obj_set_style_align(telegram_settings_label, LV_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_add_event_cb(telegram_settings_button, ui_event_telegram_button, LV_EVENT_CLICKED, NULL);
+
+    telegram_panel = lv_obj_create(objects.main_screen);
+    lv_obj_set_pos(telegram_panel, 39, 25);
+    lv_obj_set_size(telegram_panel, LV_PCT(88), LV_PCT(90));
+    lv_obj_add_flag(telegram_panel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_scroll_dir(telegram_panel, LV_DIR_VER);
+    lv_obj_set_style_layout(telegram_panel, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(telegram_panel, LV_FLEX_FLOW_COLUMN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(telegram_panel, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(telegram_panel, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(telegram_panel, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(telegram_panel, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_row(telegram_panel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(telegram_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(telegram_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(telegram_panel, colorDarkGray, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *title = lv_label_create(telegram_panel);
+    lv_obj_set_width(title, LV_PCT(100));
+    lv_label_set_text(title, _("Telegram"));
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(title, colorMesh, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *enabledRow = lv_obj_create(telegram_panel);
+    lv_obj_set_width(enabledRow, LV_PCT(100));
+    lv_obj_set_height(enabledRow, LV_SIZE_CONTENT);
+    lv_obj_clear_flag(enabledRow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_layout(enabledRow, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(enabledRow, LV_FLEX_FLOW_ROW, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_main_place(enabledRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(enabledRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(enabledRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(enabledRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(enabledRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(enabledRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *enabledLabel = lv_label_create(enabledRow);
+    lv_label_set_text(enabledLabel, _("Enabled"));
+    lv_obj_set_style_align(enabledLabel, LV_ALIGN_LEFT_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    telegram_enabled_switch = lv_switch_create(enabledRow);
+    lv_obj_set_style_align(telegram_enabled_switch, LV_ALIGN_RIGHT_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_event_cb(telegram_enabled_switch, ui_event_telegram_enabled_switch, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *directionRow = lv_obj_create(telegram_panel);
+    lv_obj_set_width(directionRow, LV_PCT(100));
+    lv_obj_set_height(directionRow, LV_SIZE_CONTENT);
+    lv_obj_clear_flag(directionRow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_layout(directionRow, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(directionRow, LV_FLEX_FLOW_COLUMN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(directionRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(directionRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(directionRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(directionRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_row(directionRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(directionRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *directionLabel = lv_label_create(directionRow);
+    lv_obj_set_width(directionLabel, LV_PCT(100));
+    lv_label_set_text(directionLabel, _("Direction"));
+
+    telegram_direction_dropdown = lv_dropdown_create(directionRow);
+    lv_obj_set_width(telegram_direction_dropdown, LV_PCT(100));
+    lv_dropdown_set_options(telegram_direction_dropdown,
+                            _("Both directions\nMesh -> Telegram only\nTelegram -> Mesh only"));
+    add_style_drop_down_style(telegram_direction_dropdown);
+
+    telegram_status_label = lv_label_create(telegram_panel);
+    lv_obj_set_width(telegram_status_label, LV_PCT(100));
+    lv_label_set_long_mode(telegram_status_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(telegram_status_label, &ui_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    auto createTextInput = [&](const char *labelText, const char *placeholder, uint32_t maxLen, lv_obj_t **textarea) {
+        lv_obj_t *row = lv_obj_create(telegram_panel);
+        lv_obj_set_width(row, LV_PCT(100));
+        lv_obj_set_height(row, LV_SIZE_CONTENT);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_layout(row, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_flex_flow(row, LV_FLEX_FLOW_COLUMN, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_left(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_right(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_row(row, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        lv_obj_t *label = lv_label_create(row);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_text(label, labelText);
+
+        lv_obj_t *field = lv_textarea_create(row);
+        lv_obj_set_width(field, LV_PCT(100));
+        lv_obj_set_height(field, 32);
+        lv_textarea_set_one_line(field, true);
+        lv_textarea_set_max_length(field, maxLen);
+        lv_textarea_set_placeholder_text(field, placeholder);
+        lv_obj_add_event_cb(field, ui_event_telegram_textarea, LV_EVENT_FOCUSED, NULL);
+        lv_obj_add_event_cb(field, ui_event_telegram_textarea, LV_EVENT_CLICKED, NULL);
+        *textarea = field;
+    };
+
+    createTextInput(_("Chat ID"), _("ex: -100123456789"), 24, &telegram_chat_id_textarea);
+    createTextInput(_("Channels (CSV)"), _("empty = all, ex: 0,1,3"), 24, &telegram_channels_textarea);
+
+    lv_obj_t *tokenRow = lv_obj_create(telegram_panel);
+    lv_obj_set_width(tokenRow, LV_PCT(100));
+    lv_obj_set_height(tokenRow, LV_SIZE_CONTENT);
+    lv_obj_clear_flag(tokenRow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_layout(tokenRow, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(tokenRow, LV_FLEX_FLOW_ROW, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_main_place(tokenRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(tokenRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(tokenRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(tokenRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(tokenRow, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(tokenRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *tokenLabel = lv_label_create(tokenRow);
+    lv_label_set_text(tokenLabel, _("Token: change mode"));
+
+    telegram_token_switch = lv_switch_create(tokenRow);
+    lv_obj_add_event_cb(telegram_token_switch, ui_event_telegram_token_switch, LV_EVENT_VALUE_CHANGED, NULL);
+
+    createTextInput(_("New token"), _("leave hidden"), 160, &telegram_token_textarea);
+    lv_textarea_set_password_mode(telegram_token_textarea, true);
+    lv_obj_add_state(telegram_token_textarea, LV_STATE_DISABLED);
+
+    createTextInput(_("Poll interval (ms)"), _("200..60000"), 8, &telegram_poll_interval_textarea);
+    createTextInput(_("Long poll timeout (sec)"), _("0..60"), 3, &telegram_long_poll_timeout_textarea);
+    createTextInput(_("Send interval (ms)"), _("200..10000"), 8, &telegram_send_interval_textarea);
+
+    telegram_field_error_label = lv_label_create(telegram_panel);
+    lv_obj_set_width(telegram_field_error_label, LV_PCT(100));
+    lv_label_set_long_mode(telegram_field_error_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_color(telegram_field_error_label, colorRed, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_flag(telegram_field_error_label, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *buttonRow = lv_obj_create(telegram_panel);
+    lv_obj_set_width(buttonRow, LV_PCT(100));
+    lv_obj_set_height(buttonRow, 34);
+    lv_obj_clear_flag(buttonRow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_layout(buttonRow, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(buttonRow, LV_FLEX_FLOW_ROW, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_main_place(buttonRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    auto createActionButton = [&](const char *text, lv_event_cb_t cb, lv_obj_t **button) {
+        lv_obj_t *obj = lv_btn_create(buttonRow);
+        lv_obj_set_size(obj, LV_PCT(32), 30);
+        add_style_settings_button_style(obj);
+        lv_obj_add_event_cb(obj, cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_t *label = lv_label_create(obj);
+        lv_label_set_text(label, text);
+        lv_obj_center(label);
+        *button = obj;
+    };
+
+    createActionButton(_("Save"), ui_event_telegram_save, &telegram_save_button);
+    createActionButton(_("Reload"), ui_event_telegram_reload, &telegram_reload_button);
+    createActionButton(_("Back"), ui_event_telegram_back, &telegram_back_button);
 }
 
 void TFTView_320x240::enterProgrammingMode(void)
@@ -1770,6 +2309,130 @@ void TFTView_320x240::ui_event_wifi_button(lv_event_t *e)
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eWifi;
     }
+}
+
+void TFTView_320x240::ui_event_telegram_button(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code == LV_EVENT_CLICKED && THIS->activeSettings == eNone) {
+        THIS->openTelegramSettings();
+    }
+}
+
+void TFTView_320x240::ui_event_telegram_enabled_switch(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code != LV_EVENT_VALUE_CHANGED || THIS->telegramUpdatingForm) {
+        return;
+    }
+
+    const bool enabled = lv_obj_has_state(THIS->telegram_enabled_switch, LV_STATE_CHECKED);
+    TelegramControlResult result = telegramSetEnabled(enabled, TelegramControlSource::DEVICE_UI);
+    if (!result.ok()) {
+        THIS->telegramUpdatingForm = true;
+        if (THIS->telegramSnapshot.enabled)
+            lv_obj_add_state(THIS->telegram_enabled_switch, LV_STATE_CHECKED);
+        else
+            lv_obj_remove_state(THIS->telegram_enabled_switch, LV_STATE_CHECKED);
+        THIS->telegramUpdatingForm = false;
+
+        THIS->showTelegramFieldError(result.message.empty() ? "Failed to update Enabled" : result.message.c_str());
+        THIS->messageAlert(result.message.empty() ? _("Failed to update Telegram") : result.message.c_str(), true);
+        return;
+    }
+
+    THIS->clearTelegramFieldError();
+    THIS->messageAlert(result.message.empty() ? _("Saved") : result.message.c_str(), true);
+    THIS->reloadTelegramSettings(true);
+}
+
+void TFTView_320x240::ui_event_telegram_token_switch(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code != LV_EVENT_VALUE_CHANGED || THIS->telegramUpdatingForm)
+        return;
+
+    const bool enabled = lv_obj_has_state(THIS->telegram_token_switch, LV_STATE_CHECKED);
+    if (enabled) {
+        lv_obj_clear_state(THIS->telegram_token_textarea, LV_STATE_DISABLED);
+        lv_group_focus_obj(THIS->telegram_token_textarea);
+    } else {
+        lv_obj_add_state(THIS->telegram_token_textarea, LV_STATE_DISABLED);
+        lv_textarea_set_text(THIS->telegram_token_textarea, "");
+    }
+}
+
+void TFTView_320x240::ui_event_telegram_save(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code != LV_EVENT_CLICKED)
+        return;
+
+    if (!THIS->telegramSnapshot.featureAvailable) {
+        THIS->messageAlert(_("Telegram not available in this build"), true);
+        return;
+    }
+
+    TelegramControlPatch patch;
+    std::string error;
+    if (!THIS->buildTelegramPatch(patch, error)) {
+        THIS->showTelegramFieldError(error.c_str());
+        return;
+    }
+
+    const bool hasChanges = patch.hasEnabled || patch.hasToken || patch.hasChatId || patch.hasChannels || patch.hasPollIntervalMs ||
+                            patch.hasLongPollTimeoutSec || patch.hasSendIntervalMs;
+    if (!hasChanges) {
+        THIS->clearTelegramFieldError();
+        THIS->messageAlert(_("No changes"), true);
+        return;
+    }
+
+    TelegramControlResult result = telegramApplyControlPatch(patch, TelegramControlSource::DEVICE_UI);
+    if (result.error == TelegramControlError::NONE) {
+        THIS->clearTelegramFieldError();
+        THIS->messageAlert(result.message.empty() ? _("Saved") : result.message.c_str(), true);
+        THIS->reloadTelegramSettings(true);
+        return;
+    }
+
+    if (result.error == TelegramControlError::INVALID_ARGUMENT) {
+        THIS->showTelegramFieldError(result.message.empty() ? "Invalid argument" : result.message.c_str());
+        return;
+    }
+
+    THIS->messageAlert(result.message.empty() ? _("Failed to save Telegram settings") : result.message.c_str(), true);
+}
+
+void TFTView_320x240::ui_event_telegram_reload(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code == LV_EVENT_CLICKED) {
+        THIS->reloadTelegramSettings(true);
+        THIS->messageAlert(_("Reloaded"), true);
+    }
+}
+
+void TFTView_320x240::ui_event_telegram_back(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code == LV_EVENT_CLICKED) {
+        THIS->closeTelegramSettings();
+    }
+}
+
+void TFTView_320x240::ui_event_telegram_textarea(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if ((event_code != LV_EVENT_FOCUSED && event_code != LV_EVENT_CLICKED) || THIS->activeSettings != eTelegram)
+        return;
+
+    lv_obj_t *textArea = lv_event_get_target_obj(e);
+    if (textArea == nullptr || lv_obj_has_state(textArea, LV_STATE_DISABLED))
+        return;
+
+    THIS->showKeyboard(textArea);
+    lv_obj_remove_flag(objects.keyboard, LV_OBJ_FLAG_HIDDEN);
 }
 
 void TFTView_320x240::ui_event_language_button(lv_event_t *e)
@@ -6913,6 +7576,11 @@ void TFTView_320x240::setGroupFocus(lv_obj_t *panel)
 
     } else if (panel == objects.settings_screen_lock_panel) {
         lv_group_focus_obj(objects.screen_lock_button_matrix);
+    } else if (panel == telegram_panel) {
+        if (telegramSnapshot.featureAvailable)
+            lv_group_focus_obj(telegram_enabled_switch);
+        else
+            lv_group_focus_obj(telegram_back_button);
     } else if (panel == objects.controller_panel) {
         lv_group_focus_obj(objects.basic_settings_user_button);
     } else {

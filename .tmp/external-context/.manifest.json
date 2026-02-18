@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-02-18T00:00:00Z",
+  "libraries": {
+    "platformio": {
+      "files": [
+        {
+          "filename": "local-lib-deps.md",
+          "topic": "local library folders in lib_deps",
+          "tech_stack": "PlatformIO",
+          "fetched": "2026-02-18T00:00:00Z",
+          "source": "PlatformIO official docs"
+        }
+      ]
+    }
+  }
+}
