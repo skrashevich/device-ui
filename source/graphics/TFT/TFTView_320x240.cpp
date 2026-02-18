@@ -46,6 +46,7 @@ fs::FS &fileSystem = LittleFS;
 #else
 #include "graphics/map/SdFatService.h"
 #endif
+#include "graphics/map/URLService.h"
 #include "graphics/common/SdCard.h"
 
 #ifndef MAX_NUM_NODES_VIEW
@@ -2506,6 +2507,7 @@ void TFTView_320x240::loadMap(void)
 #else
         map = new MapPanel(objects.raw_map_panel);
 #endif
+        map->setBackupService(new URLService());
         map->setHomeLocationImage(objects.home_location_image);
         lv_obj_add_flag(objects.home_location_image, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(objects.home_location_image, ui_event_mapNodeButton, LV_EVENT_CLICKED, (void *)ownNode);
@@ -5094,6 +5096,8 @@ void TFTView_320x240::updateHopsAway(uint32_t nodeNum, uint8_t hopsAway)
 
 void TFTView_320x240::updateConnectionStatus(const meshtastic_DeviceConnectionStatus &status)
 {
+    const bool wasWifiConnected = db.connectionStatus.has_wifi && db.connectionStatus.wifi.has_status &&
+                                  db.connectionStatus.wifi.status.is_connected;
     db.connectionStatus = status;
     if (status.has_wifi) {
         if (db.config.network.wifi_enabled || db.config.network.eth_enabled) {
@@ -5181,6 +5185,13 @@ void TFTView_320x240::updateConnectionStatus(const meshtastic_DeviceConnectionSt
     } else {
         lv_obj_add_flag(objects.home_ethernet_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(objects.home_ethernet_button, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (map && status.has_wifi && status.wifi.has_status) {
+        const bool isWifiConnected = status.wifi.status.is_connected;
+        if (isWifiConnected != wasWifiConnected) {
+            map->forceRedraw();
+        }
     }
 }
 
