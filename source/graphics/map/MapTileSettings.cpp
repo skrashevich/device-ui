@@ -11,4 +11,5 @@ float MapTileSettings::defaultLon = -0.1214328476f;
 char MapTileSettings::prefix[10] = "/maps";   // default map tile directory
 char MapTileSettings::tileStyle[20] = "";     // { osm/, atlas/, atlas-mobile/, ...}
 char MapTileSettings::tileFormat[10] = "png"; // use jpg or png
+MapTileProvider MapTileSettings::tileProvider = MapTileProvider::OSM;
 bool MapTileSettings::debug = false;

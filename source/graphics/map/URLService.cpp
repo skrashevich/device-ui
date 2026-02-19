@@ -35,7 +35,9 @@ static const char *const TILE_HOSTS[] = {"https://a.tile.openstreetmap.org", "ht
                                          "https://c.tile.openstreetmap.org"};
 static constexpr size_t TILE_HOSTS_COUNT = sizeof(TILE_HOSTS) / sizeof(TILE_HOSTS[0]);
 static constexpr size_t MAX_TILE_SIZE_BYTES = 512 * 1024;
-static constexpr const char *OSM_USER_AGENT = "Meshtastic-DeviceUI/1.0 (+https://meshtastic.org/)";
+static constexpr const char *TILE_USER_AGENT = "Meshtastic-DeviceUI/1.0 (+https://meshtastic.org/)";
+static constexpr const char *YANDEX_TILE_URL = "https://tiles.api-maps.yandex.ru/v1/tiles/";
+static constexpr const char *YANDEX_TILE_API_KEY = "45735e54-8e67-4809-95b6-6cf1e13a4b6b";
 
 bool parseUInt(const char *start, const char *end, uint32_t &value)
 {
@@ -93,6 +95,28 @@ bool parseTilePath(const char *path, uint32_t &z, uint32_t &x, uint32_t &y)
     return parseUInt(slashZ + 1, slashX, z) && parseUInt(slashX + 1, slashY, x) && parseUInt(slashY + 1, dot, y);
 }
 
+bool buildTileUrl(uint32_t z, uint32_t x, uint32_t y, char *url, size_t urlSize)
+{
+    if (!url || urlSize == 0U) {
+        return false;
+    }
+
+    if (MapTileSettings::getTileProvider() == MapTileProvider::Yandex) {
+        const int n = std::snprintf(url, urlSize,
+                                    "%s?x=%u&y=%u&z=%u&lang=ru_RU&l=map&apikey=%s",
+                                    YANDEX_TILE_URL,
+                                    x,
+                                    y,
+                                    z,
+                                    YANDEX_TILE_API_KEY);
+        return n > 0 && static_cast<size_t>(n) < urlSize;
+    }
+
+    const uint32_t index = (z + x + y) % static_cast<uint32_t>(TILE_HOSTS_COUNT);
+    const int n = std::snprintf(url, urlSize, "%s/%u/%u/%u.png", TILE_HOSTS[index], z, x, y);
+    return n > 0 && static_cast<size_t>(n) < urlSize;
+}
+
 bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
 {
     uint32_t z = 0;
@@ -103,9 +127,11 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
         return false;
     }
 
-    const uint32_t index = (z + x + y) % static_cast<uint32_t>(TILE_HOSTS_COUNT);
-    char url[160];
-    std::snprintf(url, sizeof(url), "%s/%u/%u/%u.png", TILE_HOSTS[index], z, x, y);
+    char url[256];
+    if (!buildTileUrl(z, x, y, url, sizeof(url))) {
+        ILOG_DEBUG("URLService failed to build tile URL");
+        return false;
+    }
 
     WiFiClientSecure client;
     client.setInsecure();
@@ -114,7 +140,7 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
     http.setConnectTimeout(4000);
     http.setTimeout(7000);
     http.setReuse(false);
-    http.setUserAgent(OSM_USER_AGENT);
+    http.setUserAgent(TILE_USER_AGENT);
 
     if (!http.begin(client, url)) {
         ILOG_DEBUG("URLService begin failed: %s", url);

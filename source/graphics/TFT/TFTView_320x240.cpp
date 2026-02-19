@@ -9,6 +9,7 @@
 #include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverFactory.h"
 #include "graphics/map/MapPanel.h"
+#include "graphics/map/MapTileSettings.h"
 #include "graphics/view/TFT/Themes.h"
 #include "images.h"
 #include "input/InputDriver.h"
@@ -2340,6 +2341,20 @@ void TFTView_320x240::ui_event_map_style_dropdown(lv_event_t *e)
     THIS->map->forceRedraw();
 }
 
+void TFTView_320x240::ui_event_map_provider_dropdown(lv_event_t *e)
+{
+    if (!THIS->mapProviderDropdown) {
+        return;
+    }
+
+    const uint16_t provider = lv_dropdown_get_selected(THIS->mapProviderDropdown);
+    MapTileSettings::setTileProvider(provider == 1 ? MapTileProvider::Yandex : MapTileProvider::OSM);
+    lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
+    if (THIS->map) {
+        THIS->map->forceRedraw();
+    }
+}
+
 void TFTView_320x240::ui_event_mapNodeButton(lv_event_t *e)
 {
     // navigate to node in node list
@@ -2493,8 +2508,31 @@ void TFTView_320x240::ui_event_navHome(lv_event_t *e)
     }
 }
 
+void TFTView_320x240::ensureMapProviderDropdown(void)
+{
+    if (!mapProviderDropdown) {
+        mapProviderDropdown = lv_dropdown_create(objects.map_osd_panel);
+        lv_obj_set_pos(mapProviderDropdown, 0, 100);
+        lv_obj_set_size(mapProviderDropdown, LV_PCT(85), LV_SIZE_CONTENT);
+        lv_dropdown_set_options(mapProviderDropdown, "OSM\nYandex");
+        add_style_drop_down_style(mapProviderDropdown);
+        lv_obj_set_style_align(mapProviderDropdown, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_left(mapProviderDropdown, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_row(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_column(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_event_cb(mapProviderDropdown, ui_event_map_provider_dropdown, LV_EVENT_VALUE_CHANGED, nullptr);
+    }
+
+    lv_dropdown_set_selected(mapProviderDropdown,
+                             MapTileSettings::getTileProvider() == MapTileProvider::Yandex ? 1 : 0);
+}
+
 void TFTView_320x240::loadMap(void)
 {
+    ensureMapProviderDropdown();
+
     if (!map) {
 #if LV_USE_FS_ARDUINO_SD
         map = new MapPanel(objects.raw_map_panel);
