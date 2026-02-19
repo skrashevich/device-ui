@@ -2596,6 +2596,8 @@ void TFTView_320x240::loadMap(void)
     if (sdCard) {
         if (!sdCard->isUpdated()) {
             map->setNoTileImage(&img_no_tile_image);
+            const bool hasOnlineTiles = db.connectionStatus.has_wifi && db.connectionStatus.wifi.has_status &&
+                                        db.connectionStatus.wifi.status.is_connected;
             std::set<std::string> mapStyles = sdCard->loadMapStyles(MapTileSettings::getPrefix());
             if (mapStyles.find("/map") != mapStyles.end()) {
                 // no styles found, but the /map directory, so use it
@@ -2604,6 +2606,7 @@ void TFTView_320x240::loadMap(void)
                 lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
             } else if (!mapStyles.empty()) {
                 // populate dropdown
+                lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
                 uint16_t pos = 0;
                 bool savedStyleOK = false;
                 lv_dropdown_set_options(objects.map_style_dropdown, "");
@@ -2625,7 +2628,13 @@ void TFTView_320x240::loadMap(void)
                 }
                 MapTileSettings::setPrefix("/maps");
             } else {
-                messageAlert(_("No map tiles found on SDCard!"), true);
+                lv_dropdown_set_options(objects.map_style_dropdown, "");
+                lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
+                if (!hasOnlineTiles) {
+                    lv_dropdown_set_options(objects.map_style_dropdown, _("map tiles not found!"));
+                    lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
+                    messageAlert(_("No map tiles found on SDCard!"), true);
+                }
                 map->setNoTileImage(&img_no_tile_image);
             }
             map->forceRedraw();
