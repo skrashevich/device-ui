@@ -108,6 +108,9 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
     std::snprintf(url, sizeof(url), "%s/%u/%u/%u.png", TILE_HOSTS[index], z, x, y);
 
     WiFiClientSecure client;
+    // Certificate verification is intentionally skipped: embedded targets lack
+    // a CA bundle, and OSM tile servers rotate certificates frequently.
+    // Tile data itself is public, so integrity risk is acceptable here.
     client.setInsecure();
 
     HTTPClient http;
@@ -226,11 +229,10 @@ bool URLService::load(const char *name, void *img)
         return false;
     }
 
+    // lv_image_set_src triggers tile fetch via fs_open; success/failure is
+    // determined by the LVGL filesystem driver, not by lv_image_get_src which
+    // always returns the pointer we just set.
     lv_image_set_src(static_cast<lv_obj_t *>(img), buf);
-    if (!lv_image_get_src(static_cast<lv_obj_t *>(img))) {
-        ILOG_DEBUG("Failed to load tile %s from WLAN", buf);
-        return false;
-    }
     return true;
 #else
     (void)name;
