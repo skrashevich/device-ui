@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <iomanip>
 #include <list>
@@ -212,6 +213,8 @@ bool TFTView_320x240::setupUIConfig(const meshtastic_DeviceUIConfig &uiconfig)
         db.uiConfig.screen_timeout = 30;
         controller->storeUIConfig(db.uiConfig);
     }
+
+    MapTileSettings::setTileProvider(loadPersistedMapProvider());
 
     lv_i18n_init(lv_i18n_language_pack);
     setLocale(db.uiConfig.language);
@@ -1165,6 +1168,10 @@ void TFTView_320x240::ui_event_MapButton(lv_event_t *e)
         }
         lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
     } else if (event_code == LV_EVENT_LONG_PRESSED && THIS->activeSettings == eNone) {
+        if (THIS->activePanel != objects.map_panel) {
+            THIS->ui_set_active(objects.map_button, objects.map_panel, objects.top_map_panel);
+        }
+        THIS->loadMap();
         lv_obj_clear_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
         ignoreClicked = true;
     }
@@ -2348,7 +2355,9 @@ void TFTView_320x240::ui_event_map_provider_dropdown(lv_event_t *e)
     }
 
     const uint16_t provider = lv_dropdown_get_selected(THIS->mapProviderDropdown);
-    MapTileSettings::setTileProvider(provider == 1 ? MapTileProvider::Yandex : MapTileProvider::OSM);
+    const MapTileProvider tileProvider = provider == 1 ? MapTileProvider::Yandex : MapTileProvider::OSM;
+    MapTileSettings::setTileProvider(tileProvider);
+    persistMapProvider(tileProvider);
     lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
     if (THIS->map) {
         THIS->map->forceRedraw();
