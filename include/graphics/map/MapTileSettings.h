@@ -3,6 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 
+enum class MapTileProvider : uint8_t {
+    OSM = 0,
+    Yandex = 1,
+};
+
 /**
  * Global settings for raster tile map
  */
@@ -42,6 +47,9 @@ class MapTileSettings
     static const char *getTileFormat(void) { return tileFormat; }
     static void setTileFormat(const char *p) { strcpy(tileFormat, p); }
 
+    static MapTileProvider getTileProvider(void) { return tileProvider; }
+    static void setTileProvider(MapTileProvider provider) { tileProvider = provider; }
+
     static bool getDebug(void) { return debug; }
     static void setDebug(bool on) { debug = on; }
 
@@ -55,5 +63,6 @@ class MapTileSettings
     static char prefix[];
     static char tileStyle[];
     static char tileFormat[];
+    static MapTileProvider tileProvider;
     static bool debug;
 };
