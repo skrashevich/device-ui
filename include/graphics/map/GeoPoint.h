@@ -3,6 +3,7 @@
 #include "Arduino.h"
 #include "graphics/map/MapTileSettings.h"
 #include "util/ILog.h"
+#include <algorithm>
 #include <cmath>
 #include <stdint.h>
 
@@ -19,13 +20,14 @@
 #endif
 
 /**
- * Geographical coordinate that encompasses the OSM (raster) tile inverse mercator projection
- * (WSG84 Pseudo-Mercator EPSG:3857)
+ * Geographical coordinate for map raster tiles.
+ * Supports OSM spherical mercator and Yandex wgs84 mercator projection.
  */
 class GeoPoint
 {
   public:
-    GeoPoint(uint32_t xtile, uint32_t ytile, uint8_t zoom) : xPos(0), yPos(0), xTile(xtile), yTile(ytile), zoomLevel(zoom)
+    GeoPoint(uint32_t xtile, uint32_t ytile, uint8_t zoom)
+        : xPos(0), yPos(0), xTile(xtile), yTile(ytile), zoomLevel(zoom), projectionProvider(MapTileSettings::getTileProvider())
     {
         // not used in any scenario yet; so comment out for now
         // reverse calculate from tile x/y/z back to lat/lon (upper left corner 0/0)
@@ -35,18 +37,37 @@ class GeoPoint
         //           FLOATING_POINT(std::atan(std::sinh(FLOATING_POINT(PI) * (1.0 - 2.0 * FLOATING_POINT(yTile) / n))));
     }
 
-    GeoPoint(float lat, float lon, uint8_t zoom) : latitude(lat), longitude(lon), zoomLevel(255) { setZoom(zoom); }
+    GeoPoint(float lat, float lon, uint8_t zoom)
+        : latitude(lat), longitude(lon), zoomLevel(255), projectionProvider(MapTileProvider::OSM)
+    {
+        setZoom(zoom);
+    }
 
     void setZoom(uint8_t zoom)
     {
-        if (zoom == zoomLevel)
+        const MapTileProvider provider = MapTileSettings::getTileProvider();
+        if (zoom == zoomLevel && provider == projectionProvider)
             return;
+        projectionProvider = provider;
+
         // calculate tile x/y/z and xPos/yPos from lat/long
-        auto n = 1 << zoom;
+        auto n = 1U << zoom;
         auto size = MapTileSettings::getTileSize();
-        auto lat_rad = latitude * FLOATING_POINT(PI) / FLOATING_POINT(180.0);
+        auto latitudeClamped = std::max(FLOATING_POINT(-85.05112878), std::min(FLOATING_POINT(latitude), FLOATING_POINT(85.05112878)));
+        auto lat_rad = latitudeClamped * FLOATING_POINT(PI) / FLOATING_POINT(180.0);
         auto xRaw = (longitude + 180.0) / 360.0 * n;
-        auto yRaw = (1.0 - std::log(std::tan(lat_rad) + (1.0 / std::cos(lat_rad))) / FLOATING_POINT(PI)) / 2.0 * n;
+        FLOATING_POINT yRaw;
+        if (projectionProvider == MapTileProvider::Yandex) {
+            constexpr FLOATING_POINT e = FLOATING_POINT(0.0818191908426);
+            auto phi = (1.0 - e * std::sin(lat_rad)) / (1.0 + e * std::sin(lat_rad));
+            auto theta = std::tan(FLOATING_POINT(PI) / 4.0 + lat_rad / 2.0) * std::pow(phi, e / 2.0);
+            yRaw = (1.0 - std::log(theta) / FLOATING_POINT(PI)) / 2.0 * n;
+        } else {
+            yRaw = (1.0 - std::log(std::tan(lat_rad) + (1.0 / std::cos(lat_rad))) / FLOATING_POINT(PI)) / 2.0 * n;
+        }
+
+        yRaw = std::max(FLOATING_POINT(0.0), std::min(yRaw, FLOATING_POINT(n - 1e-6)));
+        xRaw = std::max(FLOATING_POINT(0.0), std::min(FLOATING_POINT(xRaw), FLOATING_POINT(n - 1e-6)));
         xPos = uint16_t(xRaw * size) % size;
         yPos = uint16_t(yRaw * size) % size;
         xTile = uint32_t(xRaw);
@@ -77,15 +98,30 @@ class GeoPoint
             yPos -= size;
         }
 
-        auto n = 1 << zoomLevel;
-        float lon = FLOATING_POINT(xTile) / n * FLOATING_POINT(360.0) - FLOATING_POINT(180.0);
-        float lat = FLOATING_POINT(180.0) / FLOATING_POINT(PI) *
-                    FLOATING_POINT(std::atan(std::sinh(FLOATING_POINT(PI) * (1.0 - 2.0 * FLOATING_POINT(yTile) / n))));
-        float lon1 = FLOATING_POINT(xTile + 1) / n * FLOATING_POINT(360.0) - FLOATING_POINT(180.0);
-        float lat1 = FLOATING_POINT(180.0) / FLOATING_POINT(PI) *
-                     FLOATING_POINT(std::atan(std::sinh(FLOATING_POINT(PI) * (1.0 - 2.0 * FLOATING_POINT(yTile + 1) / n))));
-        longitude = lon + (lon1 - lon) * (FLOATING_POINT(xPos) / FLOATING_POINT(size));
-        latitude = lat + (lat1 - lat) * (FLOATING_POINT(yPos) / FLOATING_POINT(size));
+        auto n = 1U << zoomLevel;
+        FLOATING_POINT xNorm = (FLOATING_POINT(xTile) + FLOATING_POINT(xPos) / FLOATING_POINT(size)) / FLOATING_POINT(n);
+        FLOATING_POINT yNorm = (FLOATING_POINT(yTile) + FLOATING_POINT(yPos) / FLOATING_POINT(size)) / FLOATING_POINT(n);
+        xNorm = std::max(FLOATING_POINT(0.0), std::min(xNorm, FLOATING_POINT(1.0)));
+        yNorm = std::max(FLOATING_POINT(0.0), std::min(yNorm, FLOATING_POINT(1.0)));
+        longitude = xNorm * FLOATING_POINT(360.0) - FLOATING_POINT(180.0);
+
+        if (projectionProvider == MapTileProvider::Yandex) {
+            constexpr FLOATING_POINT e = FLOATING_POINT(0.0818191908426);
+            auto psi = FLOATING_POINT(PI) * (FLOATING_POINT(1.0) - FLOATING_POINT(2.0) * yNorm);
+            auto latRad = FLOATING_POINT(2.0) * std::atan(std::exp(psi)) - FLOATING_POINT(PI) / FLOATING_POINT(2.0);
+            for (int i = 0; i < 5; i++) {
+                auto sinLat = std::sin(latRad);
+                auto ratio = (FLOATING_POINT(1.0) + e * sinLat) / (FLOATING_POINT(1.0) - e * sinLat);
+                latRad = FLOATING_POINT(2.0) * std::atan(std::exp(psi) * std::pow(ratio, e / FLOATING_POINT(2.0))) -
+                         FLOATING_POINT(PI) / FLOATING_POINT(2.0);
+            }
+            latitude = latRad * FLOATING_POINT(180.0) / FLOATING_POINT(PI);
+        } else {
+            latitude = FLOATING_POINT(180.0) / FLOATING_POINT(PI) *
+                       FLOATING_POINT(std::atan(std::sinh(FLOATING_POINT(PI) * (1.0 - 2.0 * yNorm))));
+        }
+
+        latitude = std::max(FLOATING_POINT(-85.05112878), std::min(FLOATING_POINT(latitude), FLOATING_POINT(85.05112878)));
     }
 
     // geographical coordinate
@@ -99,6 +135,7 @@ class GeoPoint
     uint32_t yTile;
     // level 0 (course) .. 18 (detail)
     uint8_t zoomLevel;
+    MapTileProvider projectionProvider;
     bool isFiltered = false;
     bool isVisible = false;
 };

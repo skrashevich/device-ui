@@ -2360,6 +2360,7 @@ void TFTView_320x240::ui_event_map_provider_dropdown(lv_event_t *e)
     persistMapProvider(tileProvider);
     lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
     if (THIS->map) {
+        THIS->map->setZoom(MapTileSettings::getZoomLevel());
         THIS->map->forceRedraw();
     }
 }
