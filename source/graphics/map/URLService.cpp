@@ -149,8 +149,8 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
     uint8_t buffer[1024];
     uint32_t idleLoops = 0;
     while ((http.connected() || stream->available() > 0) && (remaining > 0 || remaining == -1)) {
-        const size_t available = stream->available();
-        if (available == 0U) {
+        const int avail = stream->available();
+        if (avail <= 0) {
             delay(1);
             if (++idleLoops > 5000U) {
                 break;
@@ -159,6 +159,7 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
         }
 
         idleLoops = 0;
+        const size_t available = static_cast<size_t>(avail);
         const size_t chunk = std::min(available, sizeof(buffer));
         const size_t readLen = stream->readBytes(buffer, chunk);
         if (readLen == 0U) {
