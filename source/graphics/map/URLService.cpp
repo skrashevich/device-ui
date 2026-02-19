@@ -31,6 +31,33 @@ struct UrlFile {
     size_t pos = 0;
 };
 
+// Single-slot cache: load() pre-fetches the tile so it can return a
+// meaningful bool.  fs_open() consumes it, avoiding a second HTTP request.
+struct TilePreFetchCache {
+    std::string path;
+    std::vector<uint8_t> bytes;
+    bool valid = false;
+
+    void store(const char *p, std::vector<uint8_t> &&b)
+    {
+        path = p;
+        bytes = std::move(b);
+        valid = true;
+    }
+
+    bool consume(const char *p, std::vector<uint8_t> &out)
+    {
+        if (!valid || path != p) {
+            return false;
+        }
+        out = std::move(bytes);
+        valid = false;
+        path.clear();
+        return true;
+    }
+};
+static TilePreFetchCache tilePreFetchCache;
+
 static const char *const TILE_HOSTS[] = {"https://a.tile.openstreetmap.org", "https://b.tile.openstreetmap.org",
                                          "https://c.tile.openstreetmap.org"};
 static constexpr size_t TILE_HOSTS_COUNT = sizeof(TILE_HOSTS) / sizeof(TILE_HOSTS[0]);
@@ -229,9 +256,17 @@ bool URLService::load(const char *name, void *img)
         return false;
     }
 
-    // lv_image_set_src triggers tile fetch via fs_open; success/failure is
-    // determined by the LVGL filesystem driver, not by lv_image_get_src which
-    // always returns the pointer we just set.
+    // Pre-fetch so we can return a meaningful bool and avoid a second HTTP
+    // request when LVGL calls fs_open() during the draw phase.
+    std::vector<uint8_t> bytes;
+    if (!fetchTile(name, bytes)) {
+        ILOG_DEBUG("URLService: tile unavailable: %s", name);
+        return false;
+    }
+    tilePreFetchCache.store(name, std::move(bytes));
+
+    // lv_image_set_src schedules a redraw; the actual fs_open call happens
+    // during the draw phase and will consume the pre-fetched bytes above.
     lv_image_set_src(static_cast<lv_obj_t *>(img), buf);
     return true;
 #else
@@ -250,9 +285,12 @@ void *URLService::fs_open(lv_fs_drv_t *drv, const char *path, lv_fs_mode_t mode)
     }
 
     UrlFile *file = new UrlFile;
-    if (!fetchTile(path, file->bytes)) {
-        delete file;
-        return nullptr;
+    // Consume pre-fetched bytes if load() already downloaded this tile.
+    if (!tilePreFetchCache.consume(path, file->bytes)) {
+        if (!fetchTile(path, file->bytes)) {
+            delete file;
+            return nullptr;
+        }
     }
     file->pos = 0;
     return static_cast<void *>(file);
