@@ -206,7 +206,6 @@ URLService::URLService() : ITileService("U:")
     drv.read_cb = fs_read;
     drv.write_cb = fs_write;
     drv.seek_cb = fs_seek;
-    drv.size_cb = fs_size;
     drv.tell_cb = fs_tell;
     lv_fs_drv_register(&drv);
 }
@@ -347,24 +346,6 @@ lv_fs_res_t URLService::fs_seek(lv_fs_drv_t *drv, void *file_p, uint32_t pos, lv
     (void)file_p;
     (void)pos;
     (void)whence;
-    return LV_FS_RES_NOT_IMP;
-#endif
-}
-
-lv_fs_res_t URLService::fs_size(lv_fs_drv_t *drv, void *file_p, uint32_t *size_p)
-{
-    (void)drv;
-#if URLSERVICE_HTTP_ENABLED
-    if (!file_p || !size_p) {
-        return LV_FS_RES_UNKNOWN;
-    }
-
-    UrlFile *file = static_cast<UrlFile *>(file_p);
-    *size_p = static_cast<uint32_t>(file->bytes.size());
-    return LV_FS_RES_OK;
-#else
-    (void)file_p;
-    (void)size_p;
     return LV_FS_RES_NOT_IMP;
 #endif
 }
