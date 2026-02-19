@@ -184,7 +184,15 @@ static void syncVirtualKeyboardLayout(lv_obj_t *keyboard)
         return;
     }
 
+    static lv_obj_t *lastKeyboard = nullptr;
     static uint32_t appliedLayoutCounter = 0;
+
+    // If the keyboard object was recreated, force a full re-sync.
+    if (keyboard != lastKeyboard) {
+        lastKeyboard = keyboard;
+        appliedLayoutCounter = 0;
+    }
+
     uint32_t currentLayoutCounter = TDeckKeyboardInputDriver::getLayoutChangeCounter();
     if (currentLayoutCounter == appliedLayoutCounter) {
         return;
