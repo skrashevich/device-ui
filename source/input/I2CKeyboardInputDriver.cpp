@@ -4,9 +4,284 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#ifdef DEVICEUI_TDECK_KEYLOG
+#include <cstdarg>
+#include <cstdio>
+#endif
+
 #include "indev/lv_indev_private.h"
 
 I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
+
+namespace {
+bool tdeckRussianLayoutEnabled = false;
+uint32_t tdeckLayoutChangeCounter = 0;
+
+#ifdef DEVICEUI_TDECK_KEYLOG
+void tdeckKeyLog(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    printf("[TDECK-KBD] ");
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
+#define TDECK_KEY_LOG(...) tdeckKeyLog(__VA_ARGS__)
+#else
+#define TDECK_KEY_LOG(...)
+#endif
+
+// T-Deck keyboard can emit modifier-like scan codes for left modifiers.
+// We track Alt+Shift press timing to toggle layout once per chord press.
+constexpr uint32_t TDECK_LEFT_SHIFT_KEY = 0xE1;
+constexpr uint32_t TDECK_LEFT_ALT_KEY = 0xE2;
+constexpr uint32_t TDECK_SHIFT_FALLBACK_KEY = 0xE0; // known T-Deck special code (see shift-0 comment below)
+// Some keyboard firmwares report modifiers in HID-like 0x80..0x87 range.
+constexpr uint32_t TDECK_LEFT_SHIFT_HID_KEY = 0x81;
+constexpr uint32_t TDECK_LEFT_ALT_HID_KEY = 0x82;
+constexpr uint32_t TDECK_RIGHT_SHIFT_HID_KEY = 0x85;
+constexpr uint32_t TDECK_RIGHT_ALT_HID_KEY = 0x86;
+constexpr uint32_t TDECK_LAYOUT_CHORD_WINDOW_MS = 400;
+constexpr uint32_t TDECK_LAYOUT_TOGGLE_COOLDOWN_MS = 700;
+uint32_t tdeckLastLeftShiftMs = 0;
+uint32_t tdeckLastLeftAltMs = 0;
+uint32_t tdeckLastLayoutToggleMs = 0;
+
+const char *mapLatinToRussianUtf8(uint32_t key)
+{
+    switch (key) {
+    case '`':
+        return "\xD1\x91";
+    case '~':
+        return "\xD0\x81";
+    case 'q':
+        return "\xD0\xB9";
+    case 'w':
+        return "\xD1\x86";
+    case 'e':
+        return "\xD1\x83";
+    case 'r':
+        return "\xD0\xBA";
+    case 't':
+        return "\xD0\xB5";
+    case 'y':
+        return "\xD0\xBD";
+    case 'u':
+        return "\xD0\xB3";
+    case 'i':
+        return "\xD1\x88";
+    case 'o':
+        return "\xD1\x89";
+    case 'p':
+        return "\xD0\xB7";
+    case '[':
+        return "\xD1\x85";
+    case ']':
+        return "\xD1\x8A";
+    case 'a':
+        return "\xD1\x84";
+    case 's':
+        return "\xD1\x8B";
+    case 'd':
+        return "\xD0\xB2";
+    case 'f':
+        return "\xD0\xB0";
+    case 'g':
+        return "\xD0\xBF";
+    case 'h':
+        return "\xD1\x80";
+    case 'j':
+        return "\xD0\xBE";
+    case 'k':
+        return "\xD0\xBB";
+    case 'l':
+        return "\xD0\xB4";
+    case ';':
+        return "\xD0\xB6";
+    case '\'':
+        return "\xD1\x8D";
+    case 'z':
+        return "\xD1\x8F";
+    case 'x':
+        return "\xD1\x87";
+    case 'c':
+        return "\xD1\x81";
+    case 'v':
+        return "\xD0\xBC";
+    case 'b':
+        return "\xD0\xB8";
+    case 'n':
+        return "\xD1\x82";
+    case 'm':
+        return "\xD1\x8C";
+    case ',':
+        return "\xD0\xB1";
+    case '.':
+        return "\xD1\x8E";
+    case 'Q':
+        return "\xD0\x99";
+    case 'W':
+        return "\xD0\xA6";
+    case 'E':
+        return "\xD0\xA3";
+    case 'R':
+        return "\xD0\x9A";
+    case 'T':
+        return "\xD0\x95";
+    case 'Y':
+        return "\xD0\x9D";
+    case 'U':
+        return "\xD0\x93";
+    case 'I':
+        return "\xD0\xA8";
+    case 'O':
+        return "\xD0\xA9";
+    case 'P':
+        return "\xD0\x97";
+    case '{':
+        return "\xD0\xA5";
+    case '}':
+        return "\xD0\xAA";
+    case 'A':
+        return "\xD0\xA4";
+    case 'S':
+        return "\xD0\xAB";
+    case 'D':
+        return "\xD0\x92";
+    case 'F':
+        return "\xD0\x90";
+    case 'G':
+        return "\xD0\x9F";
+    case 'H':
+        return "\xD0\xA0";
+    case 'J':
+        return "\xD0\x9E";
+    case 'K':
+        return "\xD0\x9B";
+    case 'L':
+        return "\xD0\x94";
+    case ':':
+        return "\xD0\x96";
+    case '"':
+        return "\xD0\xAD";
+    case 'Z':
+        return "\xD0\xAF";
+    case 'X':
+        return "\xD0\xA7";
+    case 'C':
+        return "\xD0\xA1";
+    case 'V':
+        return "\xD0\x9C";
+    case 'B':
+        return "\xD0\x98";
+    case 'N':
+        return "\xD0\xA2";
+    case 'M':
+        return "\xD0\xAC";
+    case '<':
+        return "\xD0\x91";
+    case '>':
+        return "\xD0\xAE";
+    default:
+        return nullptr;
+    }
+}
+
+bool insertIntoFocusedTextarea(const char *text)
+{
+#if LV_USE_TEXTAREA
+    lv_group_t *group = InputDriver::getInputGroup();
+    if (!group || !text) {
+        return false;
+    }
+
+    lv_obj_t *focused = lv_group_get_focused(group);
+    if (!focused) {
+        return false;
+    }
+
+    if (!lv_obj_check_type(focused, &lv_textarea_class)) {
+        return false;
+    }
+
+    lv_textarea_add_text(focused, text);
+    return true;
+#else
+    (void)text;
+    return false;
+#endif
+}
+
+bool isLeftShiftModifier(uint32_t key)
+{
+    return key == TDECK_LEFT_SHIFT_KEY || key == TDECK_SHIFT_FALLBACK_KEY || key == TDECK_LEFT_SHIFT_HID_KEY ||
+           key == TDECK_RIGHT_SHIFT_HID_KEY;
+}
+
+bool isLeftAltModifier(uint32_t key)
+{
+    return key == TDECK_LEFT_ALT_KEY || key == TDECK_LEFT_ALT_HID_KEY || key == TDECK_RIGHT_ALT_HID_KEY;
+}
+
+bool decodeHidModifierMask(uint32_t key, bool &shift, bool &alt)
+{
+    shift = false;
+    alt = false;
+
+    if (key < 0x80 || key > 0xFF) {
+        return false;
+    }
+
+    uint8_t mask = static_cast<uint8_t>(key & 0x7F);
+    // HID-like mask: bit1=LShift, bit2=LAlt, bit5=RShift, bit6=RAlt.
+    shift = (mask & 0x02) || (mask & 0x20);
+    alt = (mask & 0x04) || (mask & 0x40);
+    return shift || alt;
+}
+
+bool handleLayoutToggleChord(uint32_t key)
+{
+    uint32_t now = millis();
+    bool shiftMask = false;
+    bool altMask = false;
+    if (decodeHidModifierMask(key, shiftMask, altMask)) {
+        if (shiftMask) {
+            tdeckLastLeftShiftMs = now;
+            ILOG_DEBUG("T-Deck Shift modifier mask detected: 0x%02X", (unsigned int)key);
+            TDECK_KEY_LOG("shift mask detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
+        }
+        if (altMask) {
+            tdeckLastLeftAltMs = now;
+            ILOG_DEBUG("T-Deck Alt modifier mask detected: 0x%02X", (unsigned int)key);
+            TDECK_KEY_LOG("alt mask detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
+        }
+    } else if (isLeftShiftModifier(key)) {
+        tdeckLastLeftShiftMs = now;
+        ILOG_DEBUG("T-Deck Left Shift modifier detected: 0x%02X", (unsigned int)key);
+        TDECK_KEY_LOG("left shift detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
+    } else if (isLeftAltModifier(key)) {
+        tdeckLastLeftAltMs = now;
+        ILOG_DEBUG("T-Deck Left Alt modifier detected: 0x%02X", (unsigned int)key);
+        TDECK_KEY_LOG("left alt detected raw=0x%02X (%u)", (unsigned int)key, (unsigned int)key);
+    } else {
+        return false;
+    }
+
+    uint32_t diff = (tdeckLastLeftShiftMs > tdeckLastLeftAltMs) ? (tdeckLastLeftShiftMs - tdeckLastLeftAltMs)
+                                                                : (tdeckLastLeftAltMs - tdeckLastLeftShiftMs);
+    if (tdeckLastLeftShiftMs && tdeckLastLeftAltMs && diff <= TDECK_LAYOUT_CHORD_WINDOW_MS &&
+        (now - tdeckLastLayoutToggleMs) > TDECK_LAYOUT_TOGGLE_COOLDOWN_MS) {
+        tdeckLastLayoutToggleMs = now;
+        bool ru = TDeckKeyboardInputDriver::toggleRussianLayout();
+        ILOG_INFO("T-Deck keyboard layout toggled by Left Alt+Shift: %s", ru ? "RU" : "EN");
+        TDECK_KEY_LOG("layout toggled by Alt+Shift -> %s", ru ? "RU" : "EN");
+    }
+
+    // Consume modifier key events, they should not be forwarded as text/navigation keys.
+    return true;
+}
+} // namespace
 
 I2CKeyboardInputDriver::I2CKeyboardInputDriver(void) {}
 
@@ -50,6 +325,32 @@ TDeckKeyboardInputDriver::TDeckKeyboardInputDriver(uint8_t address)
     registerI2CKeyboard(this, "T-Deck Keyboard", address);
 }
 
+void TDeckKeyboardInputDriver::setRussianLayoutEnabled(bool enabled)
+{
+    if (tdeckRussianLayoutEnabled == enabled) {
+        return;
+    }
+    tdeckRussianLayoutEnabled = enabled;
+    tdeckLayoutChangeCounter++;
+    ILOG_INFO("T-Deck keyboard layout: %s", enabled ? "RU" : "EN");
+}
+
+bool TDeckKeyboardInputDriver::isRussianLayoutEnabled(void)
+{
+    return tdeckRussianLayoutEnabled;
+}
+
+bool TDeckKeyboardInputDriver::toggleRussianLayout(void)
+{
+    setRussianLayoutEnabled(!isRussianLayoutEnabled());
+    return isRussianLayoutEnabled();
+}
+
+uint32_t TDeckKeyboardInputDriver::getLayoutChangeCounter(void)
+{
+    return tdeckLayoutChangeCounter;
+}
+
 /******************************************************************
     LV_KEY_NEXT: Focus on the next object
     LV_KEY_PREV: Focus on the previous object
@@ -80,27 +381,43 @@ TDeckKeyboardInputDriver::TDeckKeyboardInputDriver(uint8_t address)
 
 void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
-    char keyValue = 0;
+    (void)indev;
+    uint32_t keyValue = 0;
+    data->state = LV_INDEV_STATE_RELEASED;
     uint8_t bytes = Wire.requestFrom(address, 1);
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
+        TDECK_KEY_LOG("raw key from i2c addr=0x%02X: 0x%02X (%u)", (unsigned int)address, (unsigned int)keyValue,
+                      (unsigned int)keyValue);
+        if (handleLayoutToggleChord(keyValue)) {
+            TDECK_KEY_LOG("key consumed as modifier/chord: 0x%02X (%u)", (unsigned int)keyValue, (unsigned int)keyValue);
+            keyValue = 0;
+        }
         // ignore empty reads and keycode 224(E0, shift-0 on T-Deck) which causes internal issues
-        if (keyValue != (char)0x00 && keyValue != (char)0xE0) {
+        if (keyValue != 0x00 && keyValue != 0xE0) {
             data->state = LV_INDEV_STATE_PRESSED;
             ILOG_DEBUG("key press value: %d", (int)keyValue);
+            TDECK_KEY_LOG("forward key to lvgl: 0x%02X (%u)", (unsigned int)keyValue, (unsigned int)keyValue);
 
             switch (keyValue) {
             case 0x0D:
                 keyValue = LV_KEY_ENTER;
                 break;
             default:
+                if (isRussianLayoutEnabled()) {
+                    const char *ruChar = mapLatinToRussianUtf8(keyValue);
+                    if (ruChar && insertIntoFocusedTextarea(ruChar)) {
+                        keyValue = 0;
+                        data->state = LV_INDEV_STATE_RELEASED;
+                    }
+                }
                 break;
             }
         } else {
-            data->state = LV_INDEV_STATE_RELEASED;
+            keyValue = 0;
         }
     }
-    data->key = (uint32_t)keyValue;
+    data->key = keyValue;
 }
 
 // ---------- TCA8418KeyboardInputDriver Implementation ----------

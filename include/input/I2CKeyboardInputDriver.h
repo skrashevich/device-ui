@@ -36,6 +36,10 @@ class TDeckKeyboardInputDriver : public I2CKeyboardInputDriver
 {
   public:
     TDeckKeyboardInputDriver(uint8_t address);
+    static void setRussianLayoutEnabled(bool enabled);
+    static bool isRussianLayoutEnabled(void);
+    static bool toggleRussianLayout(void);
+    static uint32_t getLayoutChangeCounter(void);
     void readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data) override;
     virtual ~TDeckKeyboardInputDriver(void) {}
 };
