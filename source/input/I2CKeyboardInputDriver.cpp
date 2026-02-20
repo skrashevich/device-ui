@@ -303,6 +303,11 @@ bool handleDoubleSpaceShortcut(uint32_t key)
     return false;
 }
 
+void resetDoubleSpaceShortcutState()
+{
+    tdeckLastSpaceMs = 0;
+}
+
 bool isLeftShiftModifier(uint32_t key)
 {
     return key == TDECK_LEFT_SHIFT_KEY || key == TDECK_SHIFT_FALLBACK_KEY || key == TDECK_LEFT_SHIFT_HID_KEY ||
@@ -368,6 +373,8 @@ bool handleLayoutToggleChord(uint32_t key)
         TDECK_KEY_LOG("layout toggled by Alt+Shift -> %s", ru ? "RU" : "EN");
     }
 
+    // Modifiers/chords are not text input, so break "double-space" sequence.
+    resetDoubleSpaceShortcutState();
     // Consume modifier key events, they should not be forwarded as text/navigation keys.
     return true;
 }
