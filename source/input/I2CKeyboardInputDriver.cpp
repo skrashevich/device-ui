@@ -8,6 +8,7 @@
 #include <cstdarg>
 #include <cstdio>
 #endif
+#include <cstring>
 
 #include "indev/lv_indev_private.h"
 
@@ -44,9 +45,11 @@ constexpr uint32_t TDECK_RIGHT_SHIFT_HID_KEY = 0x85;
 constexpr uint32_t TDECK_RIGHT_ALT_HID_KEY = 0x86;
 constexpr uint32_t TDECK_LAYOUT_CHORD_WINDOW_MS = 400;
 constexpr uint32_t TDECK_LAYOUT_TOGGLE_COOLDOWN_MS = 700;
+constexpr uint32_t TDECK_DOUBLE_SPACE_WINDOW_MS = 450;
 uint32_t tdeckLastLeftShiftMs = 0;
 uint32_t tdeckLastLeftAltMs = 0;
 uint32_t tdeckLastLayoutToggleMs = 0;
+uint32_t tdeckLastSpaceMs = 0;
 
 const char *mapLatinToRussianUtf8(uint32_t key)
 {
@@ -188,29 +191,85 @@ const char *mapLatinToRussianUtf8(uint32_t key)
     }
 }
 
-bool insertIntoFocusedTextarea(const char *text)
+lv_obj_t *getFocusedTextarea()
 {
 #if LV_USE_TEXTAREA
     lv_group_t *group = InputDriver::getInputGroup();
-    if (!group || !text) {
-        return false;
+    if (!group) {
+        return nullptr;
     }
 
     lv_obj_t *focused = lv_group_get_focused(group);
     if (!focused) {
-        return false;
+        return nullptr;
     }
 
     if (!lv_obj_check_type(focused, &lv_textarea_class)) {
+        return nullptr;
+    }
+
+    return focused;
+#else
+    return nullptr;
+#endif
+}
+
+bool insertIntoFocusedTextarea(const char *text)
+{
+    lv_obj_t *focused = getFocusedTextarea();
+    if (!focused || !text) {
         return false;
     }
 
     lv_textarea_add_text(focused, text);
     return true;
+}
+
+bool replacePreviousSpaceWithDotInFocusedTextarea()
+{
+#if LV_USE_TEXTAREA
+    lv_obj_t *focused = getFocusedTextarea();
+    if (!focused) {
+        return false;
+    }
+
+    const char *text = lv_textarea_get_text(focused);
+    if (!text) {
+        return false;
+    }
+
+    size_t len = strlen(text);
+    if (len == 0 || text[len - 1] != ' ') {
+        return false;
+    }
+
+    lv_textarea_del_char(focused);
+    lv_textarea_add_text(focused, ".");
+    return true;
 #else
-    (void)text;
     return false;
 #endif
+}
+
+bool handleDoubleSpaceShortcut(uint32_t key)
+{
+    if (key != ' ') {
+        tdeckLastSpaceMs = 0;
+        return false;
+    }
+
+    uint32_t now = millis();
+    if (tdeckLastSpaceMs != 0 && (now - tdeckLastSpaceMs) <= TDECK_DOUBLE_SPACE_WINDOW_MS) {
+        tdeckLastSpaceMs = 0;
+        if (replacePreviousSpaceWithDotInFocusedTextarea()) {
+            TDECK_KEY_LOG("double-space shortcut -> '.'");
+            return true;
+        }
+        return false;
+    }
+
+    tdeckLastSpaceMs = now;
+    return false;
 }
 
 bool isLeftShiftModifier(uint32_t key)
@@ -398,6 +457,11 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
             data->state = LV_INDEV_STATE_PRESSED;
             ILOG_DEBUG("key press value: %d", (int)keyValue);
             TDECK_KEY_LOG("forward key to lvgl: 0x%02X (%u)", (unsigned int)keyValue, (unsigned int)keyValue);
+
+            if (handleDoubleSpaceShortcut(keyValue)) {
+                keyValue = 0;
+                data->state = LV_INDEV_STATE_RELEASED;
+            }
 
             switch (keyValue) {
             case 0x0D:
