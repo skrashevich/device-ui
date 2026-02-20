@@ -274,7 +274,7 @@ bool replacePreviousSpaceWithDotInFocusedTextarea()
         return false;
     }
 
-    lv_textarea_del_char(focused);
+    lv_textarea_delete_char(focused);
     lv_textarea_add_text(focused, ".");
     return true;
 #else
@@ -481,7 +481,7 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
     (void)indev;
     uint32_t keyValue = 0;
     data->state = LV_INDEV_STATE_RELEASED;
-    uint8_t bytes = Wire.requestFrom(address, 1);
+    uint8_t bytes = Wire.requestFrom(static_cast<uint8_t>(address), static_cast<uint8_t>(1));
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
         TDECK_KEY_LOG("raw key from i2c addr=0x%02X: 0x%02X (%u)", (unsigned int)address, (unsigned int)keyValue,
@@ -601,7 +601,7 @@ void BBQ10KeyboardInputDriver::init(void)
 void BBQ10KeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
     char keyValue = 0;
-    uint8_t bytes = Wire.requestFrom(address, 1);
+    uint8_t bytes = Wire.requestFrom(static_cast<uint8_t>(address), static_cast<uint8_t>(1));
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
         // ignore empty reads and keycode 224(E0, shift-0 on T-Deck) which causes internal issues
@@ -633,7 +633,7 @@ CardKBInputDriver::CardKBInputDriver(uint8_t address)
 void CardKBInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
     char keyValue = 0;
-    Wire.requestFrom(address, 1);
+    Wire.requestFrom(static_cast<uint8_t>(address), static_cast<uint8_t>(1));
     if (Wire.available() > 0) {
         keyValue = Wire.read();
         // ignore empty reads and keycode 224 which causes internal issues
