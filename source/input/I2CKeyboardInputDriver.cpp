@@ -3,12 +3,12 @@
 #include "util/ILog.h"
 #include <Arduino.h>
 #include <Wire.h>
+#include <cstddef>
 
 #ifdef DEVICEUI_TDECK_KEYLOG
 #include <cstdarg>
 #include <cstdio>
 #endif
-#include <cstring>
 
 #include "indev/lv_indev_private.h"
 
@@ -226,6 +226,31 @@ bool insertIntoFocusedTextarea(const char *text)
     return true;
 }
 
+size_t utf8ByteIndexFromCharIndex(const char *text, uint32_t charIndex)
+{
+    size_t byteIndex = 0;
+    uint32_t charsSeen = 0;
+
+    while (text && text[byteIndex] != '\0' && charsSeen < charIndex) {
+        uint8_t c = static_cast<uint8_t>(text[byteIndex]);
+        if ((c & 0x80) == 0x00) {
+            byteIndex += 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            byteIndex += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            byteIndex += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            byteIndex += 4;
+        } else {
+            // Invalid lead byte, keep moving to avoid getting stuck.
+            byteIndex += 1;
+        }
+        charsSeen++;
+    }
+
+    return byteIndex;
+}
+
 bool replacePreviousSpaceWithDotInFocusedTextarea()
 {
 #if LV_USE_TEXTAREA
@@ -239,8 +264,13 @@ bool replacePreviousSpaceWithDotInFocusedTextarea()
         return false;
     }
 
-    size_t len = strlen(text);
-    if (len == 0 || text[len - 1] != ' ') {
+    uint32_t cursorPos = lv_textarea_get_cursor_pos(focused);
+    if (cursorPos == 0) {
+        return false;
+    }
+
+    size_t prevCharByteIndex = utf8ByteIndexFromCharIndex(text, cursorPos - 1);
+    if (text[prevCharByteIndex] != ' ') {
         return false;
     }
 
