@@ -14,7 +14,8 @@
 
 I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
 
-namespace {
+namespace
+{
 bool tdeckRussianLayoutEnabled = false;
 uint32_t tdeckLayoutChangeCounter = 0;
 
