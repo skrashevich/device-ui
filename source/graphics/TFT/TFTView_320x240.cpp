@@ -9,6 +9,7 @@
 #include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverFactory.h"
 #include "graphics/map/MapPanel.h"
+#include "graphics/map/MapTileSettings.h"
 #include "graphics/view/TFT/Themes.h"
 #include "images.h"
 #include "input/I2CKeyboardInputDriver.h"
@@ -22,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <iomanip>
 #include <list>
@@ -47,6 +49,7 @@ fs::FS &fileSystem = LittleFS;
 #else
 #include "graphics/map/SdFatService.h"
 #endif
+#include "graphics/map/URLService.h"
 #include "graphics/common/SdCard.h"
 
 #ifndef MAX_NUM_NODES_VIEW
@@ -169,6 +172,49 @@ static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
     KEYBOARD_BTN_ACTION(2),
 };
 
+constexpr const char *MAP_PROVIDER_PREF_PATH = "/map-provider.cfg";
+constexpr const char *MAP_PROVIDER_OSM = "osm";
+constexpr const char *MAP_PROVIDER_YANDEX = "yandex";
+
+static const char *mapProviderToString(MapTileProvider provider)
+{
+    return provider == MapTileProvider::Yandex ? MAP_PROVIDER_YANDEX : MAP_PROVIDER_OSM;
+}
+
+static MapTileProvider parseMapProvider(const char *provider)
+{
+    if (provider && std::strcmp(provider, MAP_PROVIDER_YANDEX) == 0) {
+        return MapTileProvider::Yandex;
+    }
+    return MapTileProvider::OSM;
+}
+
+static MapTileProvider loadPersistedMapProvider(void)
+{
+    File file = fileSystem.open(MAP_PROVIDER_PREF_PATH, FILE_READ);
+    if (!file) {
+        return MapTileProvider::OSM;
+    }
+
+    char value[16] = {};
+    size_t read = file.readBytesUntil('\n', value, sizeof(value) - 1);
+    value[read] = '\0';
+    file.close();
+
+    return parseMapProvider(value);
+}
+
+static void persistMapProvider(MapTileProvider provider)
+{
+    File file = fileSystem.open(MAP_PROVIDER_PREF_PATH, FILE_WRITE);
+    if (!file) {
+        ILOG_WARN("failed to persist map provider preference");
+        return;
+    }
+    file.print(mapProviderToString(provider));
+    file.close();
+}
+
 static void configureKeyboardLayouts(lv_obj_t *keyboard)
 {
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER, kb_map_en_lower, kb_ctrl_map);
@@ -183,7 +229,15 @@ static void syncVirtualKeyboardLayout(lv_obj_t *keyboard)
         return;
     }
 
+    static lv_obj_t *lastKeyboard = nullptr;
     static uint32_t appliedLayoutCounter = 0;
+
+    // If the keyboard object was recreated, force a full re-sync.
+    if (keyboard != lastKeyboard) {
+        lastKeyboard = keyboard;
+        appliedLayoutCounter = 0;
+    }
+
     uint32_t currentLayoutCounter = TDeckKeyboardInputDriver::getLayoutChangeCounter();
     if (currentLayoutCounter == appliedLayoutCounter) {
         return;
@@ -343,6 +397,8 @@ bool TFTView_320x240::setupUIConfig(const meshtastic_DeviceUIConfig &uiconfig)
         db.uiConfig.screen_timeout = 30;
         controller->storeUIConfig(db.uiConfig);
     }
+
+    MapTileSettings::setTileProvider(loadPersistedMapProvider());
 
     lv_i18n_init(lv_i18n_language_pack);
     setLocale(db.uiConfig.language);
@@ -1302,6 +1358,10 @@ void TFTView_320x240::ui_event_MapButton(lv_event_t *e)
         }
         lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
     } else if (event_code == LV_EVENT_LONG_PRESSED && THIS->activeSettings == eNone) {
+        if (THIS->activePanel != objects.map_panel) {
+            THIS->ui_set_active(objects.map_button, objects.map_panel, objects.top_map_panel);
+        }
+        THIS->loadMap();
         lv_obj_clear_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
         ignoreClicked = true;
     }
@@ -2490,6 +2550,23 @@ void TFTView_320x240::ui_event_map_style_dropdown(lv_event_t *e)
     THIS->map->forceRedraw();
 }
 
+void TFTView_320x240::ui_event_map_provider_dropdown(lv_event_t *e)
+{
+    if (!THIS->mapProviderDropdown) {
+        return;
+    }
+
+    const uint16_t provider = lv_dropdown_get_selected(THIS->mapProviderDropdown);
+    const MapTileProvider tileProvider = provider == 1 ? MapTileProvider::Yandex : MapTileProvider::OSM;
+    MapTileSettings::setTileProvider(tileProvider);
+    persistMapProvider(tileProvider);
+    lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
+    if (THIS->map) {
+        THIS->map->setZoom(MapTileSettings::getZoomLevel());
+        THIS->map->forceRedraw();
+    }
+}
+
 void TFTView_320x240::ui_event_mapNodeButton(lv_event_t *e)
 {
     // navigate to node in node list
@@ -2643,8 +2720,31 @@ void TFTView_320x240::ui_event_navHome(lv_event_t *e)
     }
 }
 
+void TFTView_320x240::ensureMapProviderDropdown(void)
+{
+    if (!mapProviderDropdown) {
+        mapProviderDropdown = lv_dropdown_create(objects.map_osd_panel);
+        lv_obj_set_pos(mapProviderDropdown, 0, 100);
+        lv_obj_set_size(mapProviderDropdown, LV_PCT(85), LV_SIZE_CONTENT);
+        lv_dropdown_set_options(mapProviderDropdown, "OSM\nYandex");
+        add_style_drop_down_style(mapProviderDropdown);
+        lv_obj_set_style_align(mapProviderDropdown, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_left(mapProviderDropdown, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_row(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_column(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_event_cb(mapProviderDropdown, ui_event_map_provider_dropdown, LV_EVENT_VALUE_CHANGED, nullptr);
+    }
+
+    lv_dropdown_set_selected(mapProviderDropdown,
+                             MapTileSettings::getTileProvider() == MapTileProvider::Yandex ? 1 : 0);
+}
+
 void TFTView_320x240::loadMap(void)
 {
+    ensureMapProviderDropdown();
+
     if (!map) {
 #if LV_USE_FS_ARDUINO_SD
         map = new MapPanel(objects.raw_map_panel);
@@ -2657,6 +2757,7 @@ void TFTView_320x240::loadMap(void)
 #else
         map = new MapPanel(objects.raw_map_panel);
 #endif
+        map->setBackupService(new URLService());
         map->setHomeLocationImage(objects.home_location_image);
         lv_obj_add_flag(objects.home_location_image, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(objects.home_location_image, ui_event_mapNodeButton, LV_EVENT_CLICKED, (void *)ownNode);
@@ -2745,6 +2846,8 @@ void TFTView_320x240::loadMap(void)
     if (sdCard) {
         if (!sdCard->isUpdated()) {
             map->setNoTileImage(&img_no_tile_image);
+            const bool hasOnlineTiles = db.connectionStatus.has_wifi && db.connectionStatus.wifi.has_status &&
+                                        db.connectionStatus.wifi.status.is_connected;
             std::set<std::string> mapStyles = sdCard->loadMapStyles(MapTileSettings::getPrefix());
             if (mapStyles.find("/map") != mapStyles.end()) {
                 // no styles found, but the /map directory, so use it
@@ -2753,6 +2856,7 @@ void TFTView_320x240::loadMap(void)
                 lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
             } else if (!mapStyles.empty()) {
                 // populate dropdown
+                lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
                 uint16_t pos = 0;
                 bool savedStyleOK = false;
                 lv_dropdown_set_options(objects.map_style_dropdown, "");
@@ -2774,7 +2878,13 @@ void TFTView_320x240::loadMap(void)
                 }
                 MapTileSettings::setPrefix("/maps");
             } else {
-                messageAlert(_("No map tiles found on SDCard!"), true);
+                lv_dropdown_set_options(objects.map_style_dropdown, "");
+                lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
+                if (!hasOnlineTiles) {
+                    lv_dropdown_set_options(objects.map_style_dropdown, _("map tiles not found!"));
+                    lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
+                    messageAlert(_("No map tiles found on SDCard!"), true);
+                }
                 map->setNoTileImage(&img_no_tile_image);
             }
             map->forceRedraw();
@@ -5249,6 +5359,8 @@ void TFTView_320x240::updateHopsAway(uint32_t nodeNum, uint8_t hopsAway)
 
 void TFTView_320x240::updateConnectionStatus(const meshtastic_DeviceConnectionStatus &status)
 {
+    const bool wasWifiConnected = db.connectionStatus.has_wifi && db.connectionStatus.wifi.has_status &&
+                                  db.connectionStatus.wifi.status.is_connected;
     db.connectionStatus = status;
     if (status.has_wifi) {
         if (db.config.network.wifi_enabled || db.config.network.eth_enabled) {
@@ -5336,6 +5448,13 @@ void TFTView_320x240::updateConnectionStatus(const meshtastic_DeviceConnectionSt
     } else {
         lv_obj_add_flag(objects.home_ethernet_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(objects.home_ethernet_button, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (map && status.has_wifi && status.wifi.has_status) {
+        const bool isWifiConnected = status.wifi.status.is_connected;
+        if (isWifiConnected != wasWifiConnected) {
+            map->forceRedraw();
+        }
     }
 }
 

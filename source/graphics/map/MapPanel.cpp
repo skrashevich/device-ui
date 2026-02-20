@@ -133,9 +133,7 @@ void MapPanel::drawObject(MapObject &obj, bool count)
 {
     if (obj.draw) {
         if (!obj.point.isFiltered) {
-            if (obj.point.zoomLevel != MapTileSettings::getZoomLevel()) {
-                obj.point.setZoom(MapTileSettings::getZoomLevel());
-            }
+            obj.point.setZoom(MapTileSettings::getZoomLevel());
             // check if object is in the visible tile area
             auto tileIt = tiles.find(HASH(obj.point.xTile, obj.point.yTile));
             if (tileIt != tiles.end()) {
