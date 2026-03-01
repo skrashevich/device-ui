@@ -10,10 +10,17 @@
 #endif
 
 #include "indev/lv_indev_private.h"
+#include "widgets/textarea/lv_textarea.h"
 
 I2CKeyboardInputDriver::KeyboardList I2CKeyboardInputDriver::i2cKeyboardList;
+NavigationCallback I2CKeyboardInputDriver::navigateHomeCallback = nullptr;
+bool I2CKeyboardInputDriver::altModifierHeld = false;
+ScrollCallback I2CKeyboardInputDriver::scrollCallback = nullptr;
+AltIndicatorCallback I2CKeyboardInputDriver::altIndicatorCallback = nullptr;
+InputEventCallback I2CKeyboardInputDriver::inputEventCallback = nullptr;
 
-namespace {
+namespace
+{
 bool tdeckRussianLayoutEnabled = false;
 uint32_t tdeckLayoutChangeCounter = 0;
 
@@ -285,6 +292,14 @@ bool handleLayoutToggleChord(uint32_t key)
 
 I2CKeyboardInputDriver::I2CKeyboardInputDriver(void) {}
 
+void I2CKeyboardInputDriver::setAltModifierHeld(bool held)
+{
+    altModifierHeld = held;
+    if (altIndicatorCallback) {
+        altIndicatorCallback(held);
+    }
+}
+
 void I2CKeyboardInputDriver::init(void)
 {
     keyboard = lv_indev_create();
@@ -312,6 +327,9 @@ void I2CKeyboardInputDriver::keyboard_read(lv_indev_t *indev, lv_indev_data_t *d
     for (auto &keyboardDef : i2cKeyboardList) {
         keyboardDef->driver->readKeyboard(keyboardDef->address, indev, data);
         if (data->state == LV_INDEV_STATE_PRESSED) {
+            if (inputEventCallback) {
+                inputEventCallback();
+            }
             // If any keyboard reports a key press, we stop reading further
             return;
         }
@@ -422,44 +440,296 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
 
 // ---------- TCA8418KeyboardInputDriver Implementation ----------
 
+// ---------- TCA8418 Register Definitions ----------
+#define TCA8418_REG_CFG 0x01
+#define TCA8418_REG_INT_STAT 0x02
+#define TCA8418_REG_KEY_LCK_EC 0x03
+#define TCA8418_REG_KEY_EVENT_A 0x04
+#define TCA8418_REG_KP_GPIO_1 0x1D
+#define TCA8418_REG_KP_GPIO_2 0x1E
+#define TCA8418_REG_KP_GPIO_3 0x1F
+#define TCA8418_REG_GPIO_DIR_1 0x23
+#define TCA8418_REG_GPIO_DIR_2 0x24
+#define TCA8418_REG_GPIO_DIR_3 0x25
+#define TCA8418_REG_GPI_EM_1 0x20
+#define TCA8418_REG_GPI_EM_2 0x21
+#define TCA8418_REG_GPI_EM_3 0x22
+#define TCA8418_REG_GPIO_INT_LVL_1 0x26
+#define TCA8418_REG_GPIO_INT_LVL_2 0x27
+#define TCA8418_REG_GPIO_INT_LVL_3 0x28
+#define TCA8418_REG_GPIO_INT_EN_1 0x1A
+#define TCA8418_REG_GPIO_INT_EN_2 0x1B
+#define TCA8418_REG_GPIO_INT_EN_3 0x1C
+#define TCA8418_REG_DEBOUNCE_DIS_1 0x29
+#define TCA8418_REG_DEBOUNCE_DIS_2 0x2A
+#define TCA8418_REG_DEBOUNCE_DIS_3 0x2B
+
+namespace
+{
+// Helper to write a register
+void tca8418WriteReg(uint8_t address, uint8_t reg, uint8_t value)
+{
+    Wire.beginTransmission(address);
+    Wire.write(reg);
+    Wire.write(value);
+    Wire.endTransmission();
+}
+
+// Helper to read a register
+uint8_t tca8418ReadReg(uint8_t address, uint8_t reg)
+{
+    Wire.beginTransmission(address);
+    Wire.write(reg);
+    Wire.endTransmission();
+    Wire.requestFrom(address, (uint8_t)1);
+    if (Wire.available()) {
+        return Wire.read();
+    }
+    return 0;
+}
+
+// T-Pager keyboard layout: 4 rows x 10 columns = 31 keys
+// Key mapping from TCA8418 key codes to characters [normal, shift, sym]
+const char TLoraPagerKeyMap[31][3] = {
+    {'q', 'Q', '1'},    // Key 1
+    {'w', 'W', '2'},    // Key 2
+    {'e', 'E', '3'},    // Key 3
+    {'r', 'R', '4'},    // Key 4
+    {'t', 'T', '5'},    // Key 5
+    {'y', 'Y', '6'},    // Key 6
+    {'u', 'U', '7'},    // Key 7
+    {'i', 'I', '8'},    // Key 8
+    {'o', 'O', '9'},    // Key 9
+    {'p', 'P', '0'},    // Key 10
+    {'a', 'A', '*'},    // Key 11
+    {'s', 'S', '/'},    // Key 12
+    {'d', 'D', '+'},    // Key 13
+    {'f', 'F', '-'},    // Key 14
+    {'g', 'G', '='},    // Key 15
+    {'h', 'H', ':'},    // Key 16
+    {'j', 'J', '\''},   // Key 17
+    {'k', 'K', '"'},    // Key 18
+    {'l', 'L', '@'},    // Key 19
+    {0x0D, 0x09, 0x0D}, // Key 20: Enter, Tab (shift), Enter (sym)
+    {0, 0, 0},          // Key 21: Sym modifier (no output)
+    {'z', 'Z', '_'},    // Key 22
+    {'x', 'X', '$'},    // Key 23
+    {'c', 'C', ';'},    // Key 24
+    {'v', 'V', '?'},    // Key 25
+    {'b', 'B', '!'},    // Key 26
+    {'n', 'N', ','},    // Key 27
+    {'m', 'M', '.'},    // Key 28
+    {0, 0, 0},          // Key 29: Shift modifier (no output)
+    {0x08, 0x08, 0x1B}, // Key 30: Backspace, Backspace (shift), ESC (sym)
+    {' ', ' ', ' '}     // Key 31: Space
+};
+
+// Modifier key indices (0-based)
+constexpr uint8_t MODIFIER_SYM_KEY = 20;   // Key 21
+constexpr uint8_t MODIFIER_SHIFT_KEY = 28; // Key 29
+
+// Modifier state (sticky toggles)
+uint8_t modifierState = 0; // 0=normal, 1=shift, 2=sym
+
+uint8_t tca8418Address = 0x34;
+} // namespace
+
 TCA8418KeyboardInputDriver::TCA8418KeyboardInputDriver(uint8_t address)
 {
+    tca8418Address = address;
     registerI2CKeyboard(this, "TCA8418 Keyboard", address);
 }
 
 void TCA8418KeyboardInputDriver::init(void)
 {
-    // Additional initialization for TCA8418 if needed
     I2CKeyboardInputDriver::init();
+
+    // Initialize TCA8418 - set up keyboard matrix and key event FIFO.
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_DIR_1, 0x00);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_DIR_2, 0x00);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_DIR_3, 0x00);
+
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPI_EM_1, 0xFF);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPI_EM_2, 0xFF);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPI_EM_3, 0xFF);
+
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_INT_LVL_1, 0x00);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_INT_LVL_2, 0x00);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_INT_LVL_3, 0x00);
+
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_INT_EN_1, 0xFF);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_INT_EN_2, 0xFF);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_GPIO_INT_EN_3, 0xFF);
+
+    tca8418WriteReg(tca8418Address, TCA8418_REG_DEBOUNCE_DIS_1, 0x00);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_DEBOUNCE_DIS_2, 0x00);
+    tca8418WriteReg(tca8418Address, TCA8418_REG_DEBOUNCE_DIS_3, 0x00);
+
+    while (tca8418ReadReg(tca8418Address, TCA8418_REG_KEY_EVENT_A) != 0) {
+    }
+
+    tca8418WriteReg(tca8418Address, TCA8418_REG_INT_STAT, 0x03);
+    uint8_t cfg = tca8418ReadReg(tca8418Address, TCA8418_REG_CFG);
+    cfg |= 0x01; // KE_IEN - Key events interrupt enable
+    tca8418WriteReg(tca8418Address, TCA8418_REG_CFG, cfg);
 }
 
 void TCA8418KeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
-    // TODO
-    char keyValue = 0;
+    (void)indev;
     data->state = LV_INDEV_STATE_RELEASED;
-    data->key = (uint32_t)keyValue;
+    data->key = 0;
+
+    Wire.beginTransmission(address);
+    Wire.write(TCA8418_REG_KEY_LCK_EC);
+    Wire.endTransmission();
+    Wire.requestFrom(address, (uint8_t)1);
+    if (Wire.available()) {
+        uint8_t keyCount = Wire.read() & 0x0F;
+        if (keyCount > 0) {
+            Wire.beginTransmission(address);
+            Wire.write(TCA8418_REG_KEY_EVENT_A);
+            Wire.endTransmission();
+            Wire.requestFrom(address, (uint8_t)1);
+            if (Wire.available()) {
+                uint8_t keyEvent = Wire.read();
+                uint8_t keyCode = keyEvent & 0x7F;
+                bool pressed = (keyEvent & 0x80) != 0;
+                if (pressed && keyCode > 0) {
+                    data->state = LV_INDEV_STATE_PRESSED;
+                    data->key = keyCode;
+                }
+            }
+        }
+    }
 }
 
 // ---------- TLoraPagerKeyboardInputDriver Implementation ----------
 
 TLoraPagerKeyboardInputDriver::TLoraPagerKeyboardInputDriver(uint8_t address) : TCA8418KeyboardInputDriver(address)
 {
-    registerI2CKeyboard(this, "TLora Pager Keyboard", address);
+    // Parent constructor already registers this device.
 }
 
 void TLoraPagerKeyboardInputDriver::init(void)
 {
-    // Additional initialization for TLora-Pager if needed
     TCA8418KeyboardInputDriver::init();
+
+    // Set up T-Pager keyboard matrix: 4 rows x 10 columns.
+    tca8418WriteReg(tca8418Address, TCA8418_REG_KP_GPIO_1, 0x0F); // Rows 0-3
+    tca8418WriteReg(tca8418Address, TCA8418_REG_KP_GPIO_2, 0xFF); // Columns 0-7
+    tca8418WriteReg(tca8418Address, TCA8418_REG_KP_GPIO_3, 0x03); // Columns 8-9
 }
 
 void TLoraPagerKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
-    // TODO
-    char keyValue = 0;
+    (void)indev;
     data->state = LV_INDEV_STATE_RELEASED;
-    data->key = (uint32_t)keyValue;
+    data->key = 0;
+
+    Wire.beginTransmission(address);
+    Wire.write(TCA8418_REG_KEY_LCK_EC);
+    Wire.endTransmission();
+    Wire.requestFrom(address, (uint8_t)1);
+    if (Wire.available()) {
+        uint8_t keyCount = Wire.read() & 0x0F;
+        if (keyCount == 0) {
+            return;
+        }
+
+        Wire.beginTransmission(address);
+        Wire.write(TCA8418_REG_KEY_EVENT_A);
+        Wire.endTransmission();
+        Wire.requestFrom(address, (uint8_t)1);
+        if (!Wire.available()) {
+            return;
+        }
+
+        uint8_t keyEvent = Wire.read();
+        uint8_t keyCode = keyEvent & 0x7F;
+        bool pressed = (keyEvent & 0x80) != 0;
+        if (keyCode == 0 || keyCode > 31) {
+            return;
+        }
+
+        uint8_t keyIndex = keyCode - 1;
+
+        // Sym released - disable temporary scroll mode while keeping modifier state.
+        if (!pressed && keyIndex == MODIFIER_SYM_KEY) {
+            I2CKeyboardInputDriver::setAltModifierHeld(false);
+            return;
+        }
+        if (!pressed) {
+            return;
+        }
+
+        if (keyIndex == MODIFIER_SHIFT_KEY) {
+            if (I2CKeyboardInputDriver::isAltModifierHeld()) {
+                bool ru = TDeckKeyboardInputDriver::toggleRussianLayout();
+                ILOG_INFO("T-Pager keyboard layout toggled by Sym+Shift: %s", ru ? "RU" : "EN");
+                modifierState = 0;
+                I2CKeyboardInputDriver::setAltModifierHeld(false);
+                return;
+            }
+            modifierState = (modifierState == 1) ? 0 : 1;
+            return;
+        }
+        if (keyIndex == MODIFIER_SYM_KEY) {
+            modifierState = (modifierState == 2) ? 0 : 2;
+            I2CKeyboardInputDriver::setAltModifierHeld(true);
+            return;
+        }
+
+        char keyChar = TLoraPagerKeyMap[keyIndex][modifierState];
+        if (keyChar == 0) {
+            return;
+        }
+
+        data->state = LV_INDEV_STATE_PRESSED;
+
+        // In RU layout mode, map latin key output to Cyrillic when entering text.
+        // Keep symbol layer unchanged to preserve punctuation/number input.
+        if (modifierState != 2 && TDeckKeyboardInputDriver::isRussianLayoutEnabled()) {
+            const char *ruChar = mapLatinToRussianUtf8(static_cast<uint32_t>(static_cast<unsigned char>(keyChar)));
+            if (ruChar && insertIntoFocusedTextarea(ruChar)) {
+                data->state = LV_INDEV_STATE_RELEASED;
+                data->key = 0;
+                modifierState = 0;
+                return;
+            }
+        }
+
+        switch (keyChar) {
+        case 0x0D: // Enter
+            data->key = LV_KEY_ENTER;
+            break;
+        case 0x09: // Tab
+            data->key = LV_KEY_NEXT;
+            break;
+        case 0x08: // Backspace
+        {
+            lv_obj_t *focused = lv_group_get_focused(lv_group_get_default());
+            if (focused && lv_obj_check_type(focused, &lv_textarea_class)) {
+                data->key = LV_KEY_BACKSPACE;
+            } else if (I2CKeyboardInputDriver::navigateHomeCallback) {
+                I2CKeyboardInputDriver::navigateHomeCallback();
+                data->state = LV_INDEV_STATE_RELEASED;
+                return;
+            } else {
+                data->key = LV_KEY_ESC;
+            }
+        } break;
+        case 0x1B: // ESC
+            data->key = LV_KEY_ESC;
+            break;
+        default:
+            data->key = (uint32_t)keyChar;
+            break;
+        }
+
+        // One-shot modifiers: clear after emitting a regular key.
+        modifierState = 0;
+    }
 }
 
 // ---------- TDeckProKeyboardInputDriver Implementation ----------

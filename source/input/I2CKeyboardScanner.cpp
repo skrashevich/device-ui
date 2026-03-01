@@ -18,8 +18,14 @@ I2CKeyboardInputDriver *I2CKeyboardScanner::scan(void)
 {
     I2CKeyboardInputDriver *driver = nullptr;
 #ifndef ARCH_PORTDUINO
+#if defined(T_LORA_PAGER) || defined(T_PAGER)
+    // T-Pager only has TCA8418 keyboard at 0x34.
+    // Avoid scanning other addresses that may collide with battery/haptics chips.
+    uint8_t i2cKeyboards[] = {SCAN_TCA8418_KB_ADDR};
+#else
     uint8_t i2cKeyboards[] = {SCAN_TDECK_KB_ADDR, SCAN_TCA8418_KB_ADDR, SCAN_CARDKB_ADDR, SCAN_BBQ10_KB_ADDR,
                               SCAN_MPR121_KB_ADDR};
+#endif
     ILOG_DEBUG("I2CKeyboardScanner scanning...");
     for (uint8_t i = 0; i < sizeof(i2cKeyboards); i++) {
         uint8_t address = i2cKeyboards[i];
@@ -32,12 +38,12 @@ I2CKeyboardInputDriver *I2CKeyboardScanner::scan(void)
                 break;
 #endif
             case SCAN_TCA8418_KB_ADDR:
-#if defined(T_LORA_PAGER)
+#if defined(T_LORA_PAGER) || defined(T_PAGER)
                 driver = new TLoraPagerKeyboardInputDriver(address);
 #elif defined(T_DECK_PRO)
                 driver = new TDeckProKeyboardInputDriver(address);
 #else
-                // TODO: driver = new TCA8418KeyboardInputDriver(address);
+                driver = new TCA8418KeyboardInputDriver(address);
 #endif
                 break;
             case SCAN_CARDKB_ADDR:
