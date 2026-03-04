@@ -282,18 +282,11 @@ bool URLService::load(const char *name, void *img)
         return false;
     }
 
-    // Pre-fetch so we can return a meaningful bool and avoid a second HTTP
-    // request when LVGL calls fs_open() during the draw phase.
-    std::vector<uint8_t> bytes;
-    if (!fetchTile(name, bytes)) {
-        ILOG_DEBUG("URLService: tile unavailable: %s", name);
+    lv_image_set_src(static_cast<lv_obj_t *>(img), buf);
+    if (!lv_image_get_src(static_cast<lv_obj_t *>(img))) {
+        ILOG_DEBUG("Failed to load tile %s from WLAN", buf);
         return false;
     }
-    tilePreFetchCache.store(name, std::move(bytes));
-
-    // lv_image_set_src schedules a redraw; the actual fs_open call happens
-    // during the draw phase and will consume the pre-fetched bytes above.
-    lv_image_set_src(static_cast<lv_obj_t *>(img), buf);
     return true;
 #else
     (void)name;
