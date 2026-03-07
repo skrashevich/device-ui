@@ -227,6 +227,8 @@ class TFTView_320x240 : public MeshtasticView
 
     void backup(uint32_t option);
     void restore(uint32_t option);
+    bool backupFullConfig(void);
+    bool restoreFullConfig(void);
 
     void scanSignal(uint32_t scanNo);
     void handleTraceRouteResponse(const meshtastic_Routing &routing);

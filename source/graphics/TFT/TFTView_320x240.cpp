@@ -586,6 +586,7 @@ void TFTView_320x240::init_screens(void)
 
 #ifdef HAS_SDCARD
     lv_obj_clear_flag(objects.basic_settings_backup_restore_button, LV_OBJ_FLAG_HIDDEN);
+    lv_dropdown_set_options(objects.settings_backup_restore_dropdown, _("Public/Private Key\nFull Config"));
 #endif
 
     if (controller->isStandalone()) {
@@ -6351,6 +6352,11 @@ void TFTView_320x240::setChannelName(const meshtastic_Channel &ch)
 void TFTView_320x240::backup(uint32_t option)
 {
 #if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    if (option == 1) {
+        backupFullConfig();
+        return;
+    }
+
     meshtastic_Config_SecurityConfig_public_key_t &pubkey = db.config.security.public_key;
     meshtastic_Config_SecurityConfig_private_key_t &privkey = db.config.security.private_key;
 
@@ -6382,6 +6388,11 @@ void TFTView_320x240::backup(uint32_t option)
 void TFTView_320x240::restore(uint32_t option)
 {
 #if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    if (option == 1) {
+        restoreFullConfig();
+        return;
+    }
+
     meshtastic_Config_SecurityConfig_public_key_t &pubkey = db.config.security.public_key;
     meshtastic_Config_SecurityConfig_private_key_t &privkey = db.config.security.private_key;
 
@@ -6421,6 +6432,274 @@ void TFTView_320x240::restore(uint32_t option)
         messageAlert(_("Failed to retrieve keys!"), true);
     }
     sd.close();
+#endif
+}
+
+// backup file format constants
+static const char BACKUP_MAGIC[4] = {'M', 'C', 'F', 'G'};
+static const uint8_t BACKUP_VERSION = 1;
+
+enum BackupSectionType : uint8_t {
+    SECTION_END = 0x00,
+    SECTION_CONFIG = 0x01,
+    SECTION_MODULE_CONFIG = 0x02,
+    SECTION_CHANNEL = 0x03,
+    SECTION_USER = 0x04,
+    SECTION_UI_CONFIG = 0x05,
+};
+
+bool TFTView_320x240::backupFullConfig(void)
+{
+#if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    std::stringstream path;
+    path << "/backup/" << std::hex << std::setw(8) << std::setfill('0') << ownNode << ".cfg";
+
+#if defined(ARCH_PORTDUINO) || defined(HAS_SD_MMC)
+    SDFs.mkdir("/backup");
+    File sd = SDFs.open(path.str().c_str(), FILE_WRITE);
+#else
+    SDFs.mkdir("/backup");
+    FsFile sd = SDFs.open(path.str().c_str(), O_RDWR | O_CREAT | O_TRUNC);
+#endif
+
+    if (!sd) {
+        ILOG_ERROR("open file %s for backup failed", path.str().c_str());
+        messageAlert(_("Failed to create backup!"), true);
+        return false;
+    }
+
+    static uint8_t encode_buf[4096];
+
+    // write header: magic(4) + version(1) + nodeId(4) + timestamp(4)
+    sd.write((const uint8_t *)BACKUP_MAGIC, 4);
+    sd.write(&BACKUP_VERSION, 1);
+    uint32_t nodeId = ownNode;
+    sd.write((const uint8_t *)&nodeId, 4);
+    time_t now;
+    time(&now);
+    uint32_t ts = (uint32_t)now;
+    sd.write((const uint8_t *)&ts, 4);
+
+    // helper: encode protobuf struct and write section to file
+    auto writeSection = [&](uint8_t type, const pb_msgdesc_t *fields, const void *src) -> bool {
+        size_t size = pb_encode_to_bytes(encode_buf, sizeof(encode_buf), fields, src);
+        if (size == 0)
+            return false;
+        sd.write(&type, 1);
+        uint16_t sz = (uint16_t)size;
+        sd.write((const uint8_t *)&sz, 2);
+        sd.write(encode_buf, size);
+        return true;
+    };
+
+    bool ok = true;
+
+    // config (device, position, power, network, display, lora, bluetooth, security)
+    ok = ok && writeSection(SECTION_CONFIG, &meshtastic_LocalConfig_msg, &db.config);
+    // module config (mqtt, serial, extNotif, telemetry, etc.)
+    ok = ok && writeSection(SECTION_MODULE_CONFIG, &meshtastic_LocalModuleConfig_msg, &db.module_config);
+    // channels
+    for (int i = 0; ok && i < c_max_channels; i++) {
+        ok = writeSection(SECTION_CHANNEL, &meshtastic_Channel_msg, &db.channel[i]);
+    }
+    // user (use local device's short_name/long_name, not db.user which may contain another node's data)
+    {
+        meshtastic_User localUser = meshtastic_User_init_default;
+        strcpy(localUser.short_name, db.short_name);
+        strcpy(localUser.long_name, db.long_name);
+        ok = ok && writeSection(SECTION_USER, &meshtastic_User_msg, &localUser);
+    }
+    // ui config
+    ok = ok && writeSection(SECTION_UI_CONFIG, &meshtastic_DeviceUIConfig_msg, &db.uiConfig);
+
+    // end marker
+    uint8_t end = SECTION_END;
+    sd.write(&end, 1);
+    sd.close();
+
+    if (ok) {
+        ILOG_INFO("full config backup done: %s", path.str().c_str());
+    } else {
+        ILOG_ERROR("full config backup failed");
+        messageAlert(_("Backup failed!"), true);
+    }
+    return ok;
+#else
+    return false;
+#endif
+}
+
+bool TFTView_320x240::restoreFullConfig(void)
+{
+#if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    std::stringstream path;
+    path << "/backup/" << std::hex << std::setw(8) << std::setfill('0') << ownNode << ".cfg";
+
+#if defined(ARCH_PORTDUINO) || defined(HAS_SD_MMC)
+    File sd = SDFs.open(path.str().c_str(), FILE_READ);
+#else
+    FsFile sd = SDFs.open(path.str().c_str(), O_RDONLY);
+#endif
+
+    if (!sd) {
+        ILOG_ERROR("open file %s for restore failed", path.str().c_str());
+        messageAlert(_("Backup file not found!"), true);
+        return false;
+    }
+
+    // validate header
+    char magic[4];
+    if (sd.read((uint8_t *)magic, 4) != 4 || memcmp(magic, BACKUP_MAGIC, 4) != 0) {
+        ILOG_ERROR("invalid backup file magic");
+        messageAlert(_("Invalid backup file!"), true);
+        sd.close();
+        return false;
+    }
+
+    uint8_t version;
+    sd.read(&version, 1);
+    if (version != BACKUP_VERSION) {
+        ILOG_ERROR("unsupported backup version %d", version);
+        messageAlert(_("Unsupported backup version!"), true);
+        sd.close();
+        return false;
+    }
+
+    // skip nodeId(4) + timestamp(4)
+    uint8_t skip[8];
+    sd.read(skip, 8);
+
+    static uint8_t decode_buf[4096];
+    int restored = 0;
+
+    while (true) {
+        uint8_t type;
+        if (sd.read(&type, 1) != 1 || type == SECTION_END)
+            break;
+
+        uint16_t size;
+        if (sd.read((uint8_t *)&size, 2) != 2 || size > sizeof(decode_buf)) {
+            ILOG_ERROR("invalid section size %d", size);
+            break;
+        }
+
+        if ((size_t)sd.read(decode_buf, size) != size) {
+            ILOG_ERROR("failed to read section data");
+            break;
+        }
+
+        switch (type) {
+        case SECTION_CONFIG: {
+            meshtastic_LocalConfig config = meshtastic_LocalConfig_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_LocalConfig_msg, &config)) {
+                if (config.has_device)
+                    controller->sendConfig(std::move(config.device));
+                if (config.has_position)
+                    controller->sendConfig(std::move(config.position));
+                if (config.has_power)
+                    controller->sendConfig(std::move(config.power));
+                if (config.has_network)
+                    controller->sendConfig(std::move(config.network));
+                if (config.has_display)
+                    controller->sendConfig(std::move(config.display));
+                if (config.has_lora)
+                    controller->sendConfig(std::move(config.lora));
+                if (config.has_bluetooth)
+                    controller->sendConfig(std::move(config.bluetooth));
+                if (config.has_security)
+                    controller->sendConfig(std::move(config.security));
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode LocalConfig");
+            }
+            break;
+        }
+        case SECTION_MODULE_CONFIG: {
+            meshtastic_LocalModuleConfig mc = meshtastic_LocalModuleConfig_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_LocalModuleConfig_msg, &mc)) {
+                if (mc.has_mqtt)
+                    controller->sendConfig(std::move(mc.mqtt));
+                if (mc.has_serial)
+                    controller->sendConfig(std::move(mc.serial));
+                if (mc.has_external_notification)
+                    controller->sendConfig(std::move(mc.external_notification));
+                if (mc.has_store_forward)
+                    controller->sendConfig(std::move(mc.store_forward));
+                if (mc.has_range_test)
+                    controller->sendConfig(std::move(mc.range_test));
+                if (mc.has_telemetry)
+                    controller->sendConfig(std::move(mc.telemetry));
+                if (mc.has_canned_message)
+                    controller->sendConfig(std::move(mc.canned_message));
+                if (mc.has_audio)
+                    controller->sendConfig(std::move(mc.audio));
+                if (mc.has_remote_hardware)
+                    controller->sendConfig(std::move(mc.remote_hardware));
+                if (mc.has_neighbor_info)
+                    controller->sendConfig(std::move(mc.neighbor_info));
+                if (mc.has_ambient_lighting)
+                    controller->sendConfig(std::move(mc.ambient_lighting));
+                if (mc.has_detection_sensor)
+                    controller->sendConfig(std::move(mc.detection_sensor));
+                if (mc.has_paxcounter)
+                    controller->sendConfig(std::move(mc.paxcounter));
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode LocalModuleConfig");
+            }
+            break;
+        }
+        case SECTION_CHANNEL: {
+            meshtastic_Channel channel = meshtastic_Channel_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_Channel_msg, &channel)) {
+                channel.has_settings = true;
+                controller->sendConfig(channel, ownNode);
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode Channel");
+            }
+            break;
+        }
+        case SECTION_USER: {
+            meshtastic_User user = meshtastic_User_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_User_msg, &user)) {
+                // update local device's user data
+                strcpy(db.short_name, user.short_name);
+                strcpy(db.long_name, user.long_name);
+                controller->sendConfig(user, ownNode);
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode User");
+            }
+            break;
+        }
+        case SECTION_UI_CONFIG: {
+            meshtastic_DeviceUIConfig uiCfg = meshtastic_DeviceUIConfig_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_DeviceUIConfig_msg, &uiCfg)) {
+                controller->storeUIConfig(uiCfg);
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode UIConfig");
+            }
+            break;
+        }
+        default:
+            ILOG_WARN("unknown backup section type %d, skipping %d bytes", type, size);
+            break;
+        }
+    }
+
+    sd.close();
+
+    if (restored > 0) {
+        ILOG_INFO("full config restore done: %d sections", restored);
+    } else {
+        messageAlert(_("Restore failed!"), true);
+        return false;
+    }
+    return true;
+#else
+    return false;
 #endif
 }
 
