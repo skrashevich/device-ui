@@ -1,6 +1,9 @@
 #if HAS_TFT && defined(VIEW_320x240)
 
 #include "graphics/view/TFT/TFTView_320x240.h"
+#ifdef HAS_CUSTOM_APPS
+#include "apps/builtin/HelloApp.h"
+#endif
 #include "Arduino.h"
 #include "graphics/common/BatteryLevel.h"
 #include "graphics/common/LoRaPresets.h"
@@ -612,6 +615,18 @@ void TFTView_320x240::init_screens(void)
 
     setInputButtonLabel();
     lv_group_focus_obj(objects.home_button);
+
+#ifdef HAS_CUSTOM_APPS
+    // Initialize custom apps framework
+    appManager = new AppManager();
+    appContext = new AppContext(controller, this);
+
+    // Register built-in apps
+    appManager->registerApp(new HelloApp());
+    appManager->initAll(appContext);
+
+    createAppsUI();
+#endif
 
     // remember position of top node panel button for group linked list
     lv_ll_t *lv_group_ll = &lv_group_get_default()->obj_ll;
@@ -7921,6 +7936,130 @@ void TFTView_320x240::task_handler(void)
         }
     }
 }
+
+// === Custom Apps integration ===
+#ifdef HAS_CUSTOM_APPS
+
+void TFTView_320x240::createAppsUI(void)
+{
+    // Create Apps navigation button in button_panel (after settings button)
+    appsButton = lv_btn_create(objects.button_panel);
+    lv_obj_set_size(appsButton, 36, 36);
+    lv_obj_add_flag(appsButton, LV_OBJ_FLAG_SCROLL_CHAIN);
+    lv_obj_clear_flag(appsButton, LV_OBJ_FLAG_PRESS_LOCK | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+    add_style_main_button_style(appsButton);
+    lv_obj_set_style_border_width(appsButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Use puzzle symbol as icon for Apps
+    lv_obj_t *icon = lv_label_create(appsButton);
+    lv_label_set_text(icon, LV_SYMBOL_LIST);
+    lv_obj_center(icon);
+
+    // Create main apps panel (same position/size as home_panel)
+    appsPanel = lv_obj_create(objects.main_screen);
+    lv_obj_set_pos(appsPanel, LV_PCT(12), LV_PCT(10));
+    lv_obj_set_size(appsPanel, LV_PCT(88), LV_PCT(90));
+    lv_obj_clear_flag(appsPanel, LV_OBJ_FLAG_SCROLLABLE);
+    add_style_panel_style(appsPanel);
+    lv_obj_add_flag(appsPanel, LV_OBJ_FLAG_HIDDEN);
+
+    // Apps list on left side (30% width)
+    appsListPanel = lv_obj_create(appsPanel);
+    lv_obj_set_pos(appsListPanel, 0, 0);
+    lv_obj_set_size(appsListPanel, LV_PCT(30), LV_PCT(100));
+    lv_obj_set_style_pad_all(appsListPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(appsListPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(appsListPanel, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_layout(appsListPanel, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(appsListPanel, LV_FLEX_FLOW_COLUMN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_row(appsListPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Title
+    lv_obj_t *title = lv_label_create(appsListPanel);
+    lv_label_set_text(title, "Apps");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Content panel for active app (70% width)
+    appsContentPanel = lv_obj_create(appsPanel);
+    lv_obj_set_pos(appsContentPanel, LV_PCT(30), 0);
+    lv_obj_set_size(appsContentPanel, LV_PCT(70), LV_PCT(100));
+    lv_obj_set_style_pad_all(appsContentPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(appsContentPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(appsContentPanel, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Show placeholder when no app selected
+    lv_obj_t *placeholder = lv_label_create(appsContentPanel);
+    lv_label_set_text(placeholder, "Select an app");
+    lv_obj_center(placeholder);
+
+    // Populate app list
+    updateAppsList();
+
+    // Register event callback
+    lv_obj_add_event_cb(appsButton, ui_event_AppsButton, LV_EVENT_CLICKED, this);
+}
+
+void TFTView_320x240::updateAppsList(void)
+{
+    if (!appsListPanel || !appManager)
+        return;
+
+    // Remove existing app buttons (skip the title label at index 0)
+    while (lv_obj_get_child_count(appsListPanel) > 1) {
+        lv_obj_del(lv_obj_get_child(appsListPanel, 1));
+    }
+
+    // Add a button for each registered app
+    for (uint8_t i = 0; i < appManager->getAppCount(); i++) {
+        ICustomApp *app = appManager->getApp(i);
+        if (!app)
+            continue;
+
+        lv_obj_t *btn = lv_btn_create(appsListPanel);
+        lv_obj_set_size(btn, LV_PCT(100), 28);
+        lv_obj_set_user_data(btn, (void *)(uintptr_t)i);
+        add_style_settings_button_style(btn);
+
+        lv_obj_t *label = lv_label_create(btn);
+        const char *icon = app->getIcon();
+        if (icon) {
+            std::string text = std::string(icon) + " " + app->getName();
+            lv_label_set_text(label, text.c_str());
+        } else {
+            lv_label_set_text(label, app->getName());
+        }
+        lv_obj_center(label);
+
+        lv_obj_add_event_cb(btn, ui_event_AppListItem, LV_EVENT_CLICKED, this);
+    }
+
+    if (appManager->getAppCount() == 0) {
+        lv_obj_t *label = lv_label_create(appsListPanel);
+        lv_label_set_text(label, "No apps");
+        lv_obj_set_style_text_color(label, lv_color_hex(0x888888), LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+}
+
+void TFTView_320x240::ui_event_AppsButton(lv_event_t *e)
+{
+    TFTView_320x240 *view = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+    if (view && view->activeSettings == eNone) {
+        view->ui_set_active(view->appsButton, view->appsPanel, nullptr);
+    }
+}
+
+void TFTView_320x240::ui_event_AppListItem(lv_event_t *e)
+{
+    TFTView_320x240 *view = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+    lv_obj_t *btn = lv_event_get_target(e);
+    uint8_t index = (uint8_t)(uintptr_t)lv_obj_get_user_data(btn);
+
+    if (view && view->appManager && view->appsContentPanel) {
+        view->appManager->showApp(index, view->appsContentPanel);
+    }
+}
+
+#endif // HAS_CUSTOM_APPS
 
 // === lvgl C style callbacks ===
 

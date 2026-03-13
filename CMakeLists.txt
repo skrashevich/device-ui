@@ -16,6 +16,8 @@ endif()
 option(ENABLE_DOCTESTS "Include tests in the library. Setting this to OFF will remove all doctest related code.
                         Tests in tests/*.cpp will still be enabled." ${MAIN_PROJECT})
 option(ENABLE_DEBUG_LOG "Enable debug log" OFF)
+option(ENABLE_CUSTOM_APPS "Enable custom apps framework" OFF)
+option(ENABLE_SCRIPTING_BERRY "Enable Berry scripting engine (requires berry library)" OFF)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL ON) # with newer cmake versions put all find_package in global scope
@@ -33,6 +35,16 @@ add_compile_definitions(ARCH_PORTDUINO)
 add_compile_definitions(ARDUINO)
 add_compile_definitions(VIEW_320x240)
 add_compile_definitions(USE_X11=1)
+
+if(ENABLE_CUSTOM_APPS)
+    add_compile_definitions(HAS_CUSTOM_APPS)
+    message(STATUS "Custom apps framework: ENABLED")
+endif()
+
+if(ENABLE_SCRIPTING_BERRY)
+    add_compile_definitions(HAS_SCRIPTING_BERRY)
+    message(STATUS "Berry scripting engine: ENABLED")
+endif()
 
 include(FetchContent)
 include(Portduino)

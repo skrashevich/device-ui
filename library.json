@@ -3,7 +3,7 @@
   "name": "meshtastic-device-ui",
   "version": "1.0.0",
   "description": "LVGL GUI for meshtastic devices",
-  "keywords": "meshtastic, sensecap, tdeck, twatch, lvgl, tft, lovyangfx, embedded",
+  "keywords": "meshtastic, sensecap, tdeck, twatch, lvgl, tft, lovyangfx, embedded, scripting, berry, custom-apps",
   "repository": {
     "type": "git",
     "url": "https://github.com/meshtastic/device-ui.git"

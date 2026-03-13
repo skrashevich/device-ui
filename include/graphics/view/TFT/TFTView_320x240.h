@@ -434,6 +434,17 @@ class TFTView_320x240 : public MeshtasticView
     lv_obj_t *mapProviderDropdown = nullptr;              // online tile provider dropdown (OSM/Yandex)
     MapPanel *map = nullptr;                              // map
     std::unordered_map<uint32_t, lv_obj_t *> nodeObjects; // nodeObjects displayed on map
+
+#ifdef HAS_CUSTOM_APPS
+    lv_obj_t *appsButton = nullptr;                       // navigation button for custom apps
+    lv_obj_t *appsPanel = nullptr;                        // container panel for custom apps
+    lv_obj_t *appsListPanel = nullptr;                    // list of available apps
+    lv_obj_t *appsContentPanel = nullptr;                 // panel where active app UI is shown
+    static void ui_event_AppsButton(lv_event_t *e);
+    static void ui_event_AppListItem(lv_event_t *e);
+    void createAppsUI(void);
+    void updateAppsList(void);
+#endif
     // extended default device profile struct with additional required data
     struct meshtastic_DeviceProfile_ext : meshtastic_DeviceProfile {
         meshtastic_User user;

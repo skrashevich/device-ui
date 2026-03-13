@@ -35,6 +35,12 @@ void MeshtasticView::task_handler(void)
         // cleanup queued requests
         requests.task_handler();
     }
+
+#ifdef HAS_CUSTOM_APPS
+    if (appManager && state == eRunning) {
+        appManager->tick((uint32_t)(curtime * 1000));
+    }
+#endif
 };
 
 void MeshtasticView::triggerHeartbeat(void)
@@ -116,6 +122,12 @@ void MeshtasticView::packetReceived(const meshtastic_MeshPacket &p)
             updateLastHeard(p.to);
         }
     }
+
+#ifdef HAS_CUSTOM_APPS
+    if (appManager) {
+        appManager->dispatchPacket(p);
+    }
+#endif
 }
 
 void MeshtasticView::removeNode(uint32_t nodeNum) {}

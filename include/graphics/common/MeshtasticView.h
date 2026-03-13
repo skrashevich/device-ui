@@ -12,6 +12,11 @@
 #include <time.h>
 #include <unordered_map>
 
+#ifdef HAS_CUSTOM_APPS
+#include "apps/AppManager.h"
+#include "apps/AppContext.h"
+#endif
+
 #define LV_OBJ_IDX(x) spec_attr->children[x]
 
 constexpr uint8_t c_max_channels = 8;
@@ -180,4 +185,14 @@ class MeshtasticView : public DeviceGUI
     bool messagesRestored = false;                        // message restoration process finished
     time_t lastrun20 = 0;                                 // 20s task
     time_t curtime = 0;                                   // current system time
+
+#ifdef HAS_CUSTOM_APPS
+  public:
+    AppManager *getAppManager() { return appManager; }
+    void setAppManager(AppManager *mgr) { appManager = mgr; }
+
+  protected:
+    AppManager *appManager = nullptr;
+    AppContext *appContext = nullptr;
+#endif
 };
