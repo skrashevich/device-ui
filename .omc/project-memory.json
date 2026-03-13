@@ -1,0 +1,191 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1773442108073,
+  "projectRoot": "/Users/svk/Documents/Projects.nosync/device-ui",
+  "techStack": {
+    "languages": [
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "CMakeLists.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "build-verify": {
+      "path": "build-verify",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1773442108061,
+      "keyFiles": []
+    },
+    "cmake": {
+      "path": "cmake",
+      "purpose": null,
+      "fileCount": 7,
+      "lastAccessed": 1773442108063,
+      "keyFiles": [
+        "Doctest.cmake",
+        "LVGL.cmake",
+        "LovyanGFX.cmake",
+        "Portduino.cmake",
+        "esp32_toolchain.cmake"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 6,
+      "lastAccessed": 1773442108063,
+      "keyFiles": [
+        "CYD.png",
+        "Pi400-TFT.jpg",
+        "T-Deck.jpg",
+        "X11.png",
+        "class-diagram.png"
+      ]
+    },
+    "drivers": {
+      "path": "drivers",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1773442108064,
+      "keyFiles": [
+        "Touch_CST820.cpp",
+        "Touch_CST820.h"
+      ]
+    },
+    "generated": {
+      "path": "generated",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1773442108065,
+      "keyFiles": []
+    },
+    "include": {
+      "path": "include",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1773442108065,
+      "keyFiles": [
+        "lv_conf.h"
+      ]
+    },
+    "locale": {
+      "path": "locale",
+      "purpose": null,
+      "fileCount": 25,
+      "lastAccessed": 1773442108065,
+      "keyFiles": [
+        "README.md",
+        "bg.yml",
+        "cs.yml",
+        "da.yml",
+        "de.yml"
+      ]
+    },
+    "maps": {
+      "path": "maps",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1773442108066,
+      "keyFiles": [
+        "README.md",
+        "atlas.zip",
+        "dark-matter-brown.zip",
+        "osm.zip",
+        "positron.zip"
+      ]
+    },
+    "portduino": {
+      "path": "portduino",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1773442108066,
+      "keyFiles": [
+        "Light_PWM.cpp",
+        "Light_PWM.h"
+      ]
+    },
+    "resources": {
+      "path": "resources",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1773442108067,
+      "keyFiles": [
+        "mouse_cursor_icon.c"
+      ]
+    },
+    "source": {
+      "path": "source",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1773442108067,
+      "keyFiles": []
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 3,
+      "lastAccessed": 1773442108067,
+      "keyFiles": [
+        "lib.cpp",
+        "mesh-pb-constants.cpp",
+        "mesh-pb-constants.h"
+      ]
+    },
+    "studio": {
+      "path": "studio",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1773442108068,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 3,
+      "lastAccessed": 1773442108069,
+      "keyFiles": [
+        "test_GeoPoint.cpp",
+        "test_MapPanel.cpp",
+        "test_main.cpp"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}
