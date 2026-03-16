@@ -1342,55 +1342,287 @@ Result: a compact application of ~50 lines of code showing node information.
 - No access to personal dialogs
 - Limited functionality
 
-### Why Berry for Scripting (Future)
+### Why Berry for Scripting
 
-Custom Apps Framework is prepared for Berry support (a lightweight scripting language):
-- Tasmota uses Berry successfully
-- Small memory footprint
-- LVGL integration
-- Hot-loading scripts capability
+Berry is a lightweight Python-like scripting language proven on ESP32 (Tasmota):
+- ~100KB flash, ~10KB RAM per engine
+- 32KB heap per script app
+- LVGL integration via handle-based UI module
+- Hot-loading scripts from SD card filesystem
 
 **Alternatives considered:**
-- Lua: older, less optimized
+- Lua: older, less optimized for embedded
 - MicroPython: requires ~500KB memory (too much for ESP32)
 - Elk: AGPL license (restricts commercial use)
 
 ---
 
-## 8. Known Limitations and TODO
+## 8. Berry Scripting Engine
+
+### 8.1 Overview
+
+Berry scripts are loaded automatically from `/apps/scripts/` on the device filesystem. Each `.be` file becomes a custom app with its own UI panel, accessible through the app switcher.
+
+**Architecture:**
+
+```
+┌──────────────────────────────────────────────┐
+│          Berry Script (.be file)              │
+│    app_create_ui(), app_tick(), etc.          │
+├──────────────────────────────────────────────┤
+│  ui.*   │ mesh.* │ store.* │ fs.* │ audio.* │
+│  (LVGL) │ (mesh) │ (kv)   │ (SD) │ (MP3)   │
+├──────────────────────────────────────────────┤
+│         BerryEngine (C++ wrapper)            │
+│         ScriptApp → ICustomApp bridge        │
+├──────────────────────────────────────────────┤
+│         AppManager (up to 8 apps)            │
+└──────────────────────────────────────────────┘
+```
+
+### 8.2 Build Flags
+
+| Flag | CMake Option | Purpose |
+|------|-------------|---------|
+| `HAS_CUSTOM_APPS` | `ENABLE_CUSTOM_APPS=ON` | Enable custom apps framework |
+| `HAS_SCRIPTING_BERRY` | `ENABLE_SCRIPTING_BERRY=ON` | Enable Berry scripting engine |
+| `HAS_AUDIO_PLAYER` | `ENABLE_AUDIO_PLAYER=ON` | Enable MP3 audio player module |
+
+Build example:
+```bash
+cmake -DENABLE_CUSTOM_APPS=ON -DENABLE_SCRIPTING_BERRY=ON -DENABLE_AUDIO_PLAYER=ON ..
+```
+
+### 8.3 Script Lifecycle
+
+Berry scripts implement lifecycle functions called by the ScriptApp bridge:
+
+| Function | When Called | Required |
+|----------|-----------|----------|
+| `app_init()` | Once after script load | Optional |
+| `app_create_ui()` | On first app open (lazy) | Optional |
+| `app_show()` | Panel becomes visible | Optional |
+| `app_hide()` | Panel is hidden | Optional |
+| `app_tick(now_ms)` | Every ~50ms while active | Optional |
+| `app_on_message(from, text)` | On incoming mesh TEXT_MESSAGE_APP | Optional |
+| `app_destroy()` | Before app removal | Optional |
+
+### 8.4 Berry Modules
+
+#### `ui.*` — LVGL Widgets
+
+Handle-based UI system. Max 64 widget handles per script engine.
+
+**Widget creation:**
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `ui.root()` | handle | Get root panel (handle 0) |
+| `ui.label(parent, text)` | handle | Create text label |
+| `ui.button(parent, text)` | handle | Create button |
+| `ui.panel(parent)` | handle | Create container panel |
+| `ui.list(parent)` | handle | Create list widget |
+| `ui.textarea(parent, placeholder)` | handle | Create text input |
+| `ui.checkbox(parent, text)` | handle | Create checkbox |
+| `ui.switch_widget(parent)` | handle | Create toggle switch |
+
+**Styling:**
+
+| Function | Description |
+|----------|-------------|
+| `ui.set_text(handle, text)` | Update widget text |
+| `ui.set_size(handle, w, h)` | Set width/height |
+| `ui.set_pos(handle, x, y)` | Set position |
+| `ui.set_flex_flow(handle, flow)` | Layout: 0=ROW, 1=COLUMN |
+| `ui.set_style_bg_color(handle, r, g, b)` | Background color (RGB) |
+| `ui.set_style_text_color(handle, r, g, b)` | Text color (RGB) |
+| `ui.set_hidden(handle, bool)` | Show/hide widget |
+
+**Events:**
+
+| Function | Description |
+|----------|-------------|
+| `ui.on_click(handle, "callback_name")` | Register click callback |
+| `ui.on_value_changed(handle, "callback_name")` | Register value change callback |
+| `ui.delete(handle)` | Delete widget and free handle |
+
+#### `mesh.*` — Mesh Communication
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `mesh.send(to_node, channel, text)` | — | Send text to specific node |
+| `mesh.broadcast(channel, text)` | — | Broadcast on channel |
+| `mesh.my_node()` | int | Get local node number |
+
+#### `store.*` — Persistent Key-Value Storage
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `store.set(key, value)` | bool | Store string (key max 32 chars) |
+| `store.get(key)` | string | Load value (empty on miss) |
+
+#### `http.*` — HTTP Requests (requires `HAS_HTTP_CLIENT`)
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `http.get(url)` | string | GET request, 5s timeout |
+| `http.post(url, body)` | string | POST with application/json |
+
+#### `fs.*` — SD Card Filesystem
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `fs.list_dir(path [, ext])` | list | List filenames; optional extension filter (e.g. `".mp3"`) |
+| `fs.file_size(path)` | int | File size in bytes; -1 on error |
+| `fs.exists(path)` | bool | Check if file/directory exists |
+
+Security: paths containing `..` are rejected to prevent path traversal.
+
+Requires `HAS_SD_MMC` or `HAS_SDCARD`. Returns empty values without SD backend.
+
+#### `audio.*` — MP3 Audio Player (requires `HAS_AUDIO_PLAYER`)
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `audio.play(path)` | bool | Start playing MP3 from SD card |
+| `audio.pause()` | — | Pause playback |
+| `audio.resume()` | — | Resume paused playback |
+| `audio.stop()` | — | Stop and close file |
+| `audio.status()` | string | `"playing"`, `"paused"`, or `"stopped"` |
+| `audio.volume(level)` | — | Set volume 0-100 |
+| `audio.position()` | int | Current position in ms |
+| `audio.duration()` | int | Total duration in ms (0 if unknown) |
+| `audio.file()` | string | Path of currently open file |
+
+**Audio hardware:**
+- **I2S DAC (recommended):** External MAX98357A or PCM5102. Configure pins via defines:
+  - `AUDIO_I2S_BCLK` (default 26)
+  - `AUDIO_I2S_LRCLK` (default 25)
+  - `AUDIO_I2S_DOUT` (default 22)
+- **PWM fallback:** Define `HAS_AUDIO_PWM_FALLBACK` for T-Deck buzzer on GPIO 42. Lower quality, mono 8-bit output.
+
+### 8.5 Example: MP3 Player
+
+A complete MP3 player Berry app is included at `source/apps/scripts/mp3player.be`.
+
+**Features:**
+- Scans `/mp3/` directory on SD card for `.mp3` files
+- Scrollable file list (up to 20 files)
+- Playback controls: Prev, Play/Pause, Next, Stop
+- Auto-advances to next track when current finishes
+- Shows current track name and playback status
+- Handles missing SD card gracefully
+
+**Setup:**
+1. Place `.mp3` files in the `/mp3/` directory on the SD card
+2. Build with flags: `HAS_CUSTOM_APPS`, `HAS_SCRIPTING_BERRY`, `HAS_AUDIO_PLAYER`, `HAS_SD_MMC`
+3. The "Mp3player" app will appear in the app list automatically
+
+**UI Layout (320x240):**
+
+```
+┌─────────────────────────┐
+│  MP3 Player             │  ← header
+├─────────────────────────┤
+│  > song1.mp3            │  ← file list (scrollable)
+│    song2.mp3            │    click to play
+│    song3.mp3            │
+├─────────────────────────┤
+│  song1.mp3              │  ← current track
+│  Playing                │  ← status
+├─────────────────────────┤
+│ [Prev] [Pause] [Next] [Stop] │ ← controls
+└─────────────────────────┘
+```
+
+**Key code patterns:**
+
+```berry
+# Load files with extension filter
+def load_files()
+    files = fs.list_dir("/mp3", ".mp3")
+end
+
+# Play/Pause toggle
+def on_play_pause()
+    var st = audio.status()
+    if st == "playing"
+        audio.pause()
+    elif st == "paused"
+        audio.resume()
+    else
+        audio.play("/mp3/" + files[current_idx])
+    end
+end
+
+# Auto-advance in app_tick (check every 1s)
+def app_tick(now_ms)
+    if audio.status() == "stopped" && was_playing
+        current_idx = (current_idx + 1) % size(files)
+        audio.play("/mp3/" + files[current_idx])
+    end
+    was_playing = (audio.status() == "playing")
+end
+```
+
+### 8.6 Writing a Berry Script App
+
+**Minimal example** (`source/apps/scripts/my_app.be`):
+
+```berry
+def app_create_ui()
+    var root = ui.root()
+    ui.set_flex_flow(root, 1)   # column layout
+    ui.label(root, "Hello from Berry!")
+end
+```
+
+**Tips:**
+- Budget widget handles carefully (max 64 per app)
+- Update UI in `app_tick()` no more than once per second
+- Use `store.set()`/`store.get()` for persistent configuration
+- Call `audio.stop()` in `app_destroy()` if using audio
+- File names become app names: `hello_world.be` → "Hello World"
+
+---
+
+## 9. Known Limitations and TODO
 
 ### Current Limitations
 
 | Limitation | Status | Reason |
 |-----------|--------|--------|
 | WebSocket on ESP32 | NOT IMPLEMENTED | Requires a WebSocket client library, uses HTTP polling |
-| Berry LVGL bindings | PLACEHOLDER | Requires wrappers for each LVGL method |
-| Berry mesh bindings | PLACEHOLDER | Requires exporting all mesh APIs to Berry |
 | Maximum 8 apps | BY DESIGN | ESP32 memory constraint |
+| Max 64 UI widgets per script | BY DESIGN | Handle table size limit |
+| Berry heap 32KB per app | BY DESIGN | Memory budget on ESP32 |
+| Audio: no seeking | NOT IMPLEMENTED | libhelix-mp3 decodes sequentially |
+| Audio: MP3 only | BY DESIGN | libhelix-mp3 supports only MP3 format |
 | Data synchronization | MANUAL | App must manage UI updates on data changes itself |
-| Hot-reloading apps | NOT SUPPORTED | Requires dynamic loading and unloading |
 
 ### TODO for Future Versions
 
 - [ ] WebSocket support on ESP32 (replace HTTP polling with push updates)
-- [ ] Berry interpreter integration in device-ui
-- [ ] Berry LVGL bindings (lv_obj_create, lv_label_set_text, etc.)
-- [ ] Berry mesh API bindings
-- [ ] Dynamic loading of .berry scripts as applications
+- [x] Berry interpreter integration in device-ui
+- [x] Berry LVGL bindings (ui.* module with handle-based widgets)
+- [x] Berry mesh API bindings (mesh.send, mesh.broadcast, mesh.my_node)
+- [x] Berry filesystem bindings (fs.list_dir, fs.file_size, fs.exists)
+- [x] Berry audio bindings (audio.play, audio.pause, audio.stop, etc.)
+- [x] Dynamic loading of .be scripts as applications (ScriptLoader)
+- [x] MP3 player example app (mp3player.be)
+- [ ] Audio: WAV/OGG format support
+- [ ] Audio: FreeRTOS task for background decoding
 - [ ] UI Designer for creating LVGL forms without code
 - [ ] Memory and CPU profiling/testing
-- [ ] Application optimization documentation
 - [ ] Examples: GPS tracker, climate sensor, alert system
 
 ---
 
 ## Conclusion
 
-Custom Apps Framework provides a powerful and flexible system for extending Meshtastic device functionality. The "thin client + companion server" architecture allows adding complex features (such as Telegram integration) without overloading ESP32 memory.
+Custom Apps Framework provides a powerful and flexible system for extending Meshtastic device functionality. The "thin client + companion server" architecture allows adding complex features (such as Telegram integration) without overloading ESP32 memory. The Berry scripting engine enables rapid prototyping of apps directly on the device — from simple utilities to a full MP3 player — without recompilation.
 
 To get started with development:
-1. Study the ICustomApp interface
-2. Look at the TelegramApp or MqttSettingsApp implementation
-3. Create your own implementation following the step-by-step guide (section 6)
-4. Register it in AppManager
-5. Build the project with the ENABLE_CUSTOM_APPS=ON flag
+1. **C++ apps:** Study the ICustomApp interface, look at TelegramApp or MqttSettingsApp, follow the step-by-step guide (section 6)
+2. **Berry scripts:** Place a `.be` file in `source/apps/scripts/`, implement `app_create_ui()`, and use the available modules (section 8)
+3. Build the project with the `ENABLE_CUSTOM_APPS=ON` flag (add `ENABLE_SCRIPTING_BERRY=ON` for Berry support)

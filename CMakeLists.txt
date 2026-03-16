@@ -70,6 +70,12 @@ if(ENABLE_CUSTOM_APPS)
     target_include_directories(DeviceUI PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endif()
 
+option(ENABLE_AUDIO_PLAYER "Enable MP3 audio player" OFF)
+if(ENABLE_AUDIO_PLAYER)
+    target_compile_definitions(DeviceUI PUBLIC HAS_AUDIO_PLAYER)
+    # TODO: FetchContent for libhelix-mp3 when standalone package is available
+endif()
+
 option(ENABLE_SCRIPTING_BERRY "Enable Berry scripting engine" OFF)
 if(ENABLE_SCRIPTING_BERRY)
     FetchContent_Declare(berry

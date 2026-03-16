@@ -3,8 +3,13 @@
 
 #include "apps/BerryEngine.h"
 #include "apps/AppContext.h"
+#include "apps/ScriptFsBindings.h"
 #include "util/ILog.h"
 #include <string>
+
+#ifdef HAS_AUDIO_PLAYER
+#include "apps/ScriptAudioBindings.h"
+#endif
 
 // Berry C API
 #include "berry.h"
@@ -461,9 +466,25 @@ void BerryEngine::registerBuiltins()
     registerModule(vm, "http", "post", be_http_post);
 #endif
 
-    ILOG_INFO("BerryEngine: built-in modules registered (mesh, store%s)",
+    // fs module (SD card filesystem access)
+    ScriptFSBindings_register(vm);
+
+#ifdef HAS_AUDIO_PLAYER
+    // audio module (MP3 player)
+    ScriptAudioBindings_register(this);
+#endif
+
+    ILOG_INFO("BerryEngine: built-in modules registered (mesh, store%s%s%s)",
 #ifdef HAS_HTTP_CLIENT
               ", http"
+#else
+              ""
+#endif
+              ,
+              ", fs"
+              ,
+#ifdef HAS_AUDIO_PLAYER
+              ", audio"
 #else
               ""
 #endif
