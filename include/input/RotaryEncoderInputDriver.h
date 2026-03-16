@@ -23,4 +23,5 @@ class RotaryEncoderInputDriver : public InputDriver
   private:
     static RotaryEncoder *rotary;
     static volatile int16_t encoderDiff;
+    static uint32_t lastStepTime;
 };

@@ -9,6 +9,7 @@
 // Static member initialization
 RotaryEncoder *RotaryEncoderInputDriver::rotary = nullptr;
 volatile int16_t RotaryEncoderInputDriver::encoderDiff = 0;
+uint32_t RotaryEncoderInputDriver::lastStepTime = 0;
 
 RotaryEncoderInputDriver::RotaryEncoderInputDriver(void) {}
 
@@ -68,10 +69,19 @@ void RotaryEncoderInputDriver::task_handler(void)
     // Process rotary encoder - must be called frequently for proper quadrature decoding
     RotaryEncoder::Direction dir = rotary->process();
 
-    if (dir == RotaryEncoder::DIRECTION_CW) {
-        encoderDiff++;
-    } else if (dir == RotaryEncoder::DIRECTION_CCW) {
-        encoderDiff--;
+    if (dir == RotaryEncoder::DIRECTION_CW || dir == RotaryEncoder::DIRECTION_CCW) {
+        uint32_t now = millis();
+        uint32_t elapsed = now - lastStepTime;
+        int16_t multiplier = 1;
+        if (elapsed < 50) multiplier = 4;
+        else if (elapsed < 100) multiplier = 2;
+        lastStepTime = now;
+
+        if (dir == RotaryEncoder::DIRECTION_CW) {
+            encoderDiff += multiplier;
+        } else {
+            encoderDiff -= multiplier;
+        }
     }
 }
 
