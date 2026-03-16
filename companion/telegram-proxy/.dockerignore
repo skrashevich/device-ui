@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+*.session
+sessions/
+.git
+README.md
+docker-compose.yml
+Dockerfile

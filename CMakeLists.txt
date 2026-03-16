@@ -16,6 +16,7 @@ endif()
 option(ENABLE_DOCTESTS "Include tests in the library. Setting this to OFF will remove all doctest related code.
                         Tests in tests/*.cpp will still be enabled." ${MAIN_PROJECT})
 option(ENABLE_DEBUG_LOG "Enable debug log" OFF)
+option(ENABLE_CUSTOM_APPS "Enable custom apps framework" OFF)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL ON) # with newer cmake versions put all find_package in global scope
@@ -61,6 +62,27 @@ if(ENABLE_DOCTESTS)
     target_compile_definitions(DeviceUI PRIVATE UNIT_TEST)
     if(ENABLE_DEBUG_LOG)
         target_compile_definitions(DeviceUI PRIVATE DEBUG_UNIT_TEST)
+    endif()
+endif()
+
+if(ENABLE_CUSTOM_APPS)
+    target_compile_definitions(DeviceUI PUBLIC HAS_CUSTOM_APPS)
+    target_include_directories(DeviceUI PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+endif()
+
+option(ENABLE_SCRIPTING_BERRY "Enable Berry scripting engine" OFF)
+if(ENABLE_SCRIPTING_BERRY)
+    FetchContent_Declare(berry
+        GIT_REPOSITORY https://github.com/berry-lang/berry.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(berry)
+    target_link_libraries(DeviceUI PRIVATE berry)
+    target_compile_definitions(DeviceUI PUBLIC HAS_SCRIPTING_BERRY)
+    target_include_directories(DeviceUI PRIVATE ${berry_SOURCE_DIR}/src)
+    if(NOT ENABLE_CUSTOM_APPS)
+        target_include_directories(DeviceUI PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     endif()
 endif()
 

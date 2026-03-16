@@ -1,6 +1,17 @@
 #if HAS_TFT && defined(VIEW_320x240)
 
 #include "graphics/view/TFT/TFTView_320x240.h"
+#ifdef HAS_CUSTOM_APPS
+#include "apps/AppManager.h"
+#include "apps/AppContext.h"
+#include "apps/builtin/TelegramApp.h"
+#include "apps/builtin/MqttSettingsApp.h"
+#ifdef HAS_SCRIPTING_BERRY
+#include "apps/BerryEngine.h"
+#include "apps/ScriptApp.h"
+#include "apps/ScriptLoader.h"
+#endif
+#endif
 #include "Arduino.h"
 #include "graphics/common/BatteryLevel.h"
 #include "graphics/common/LoRaPresets.h"
@@ -121,6 +132,12 @@ static const char *const kb_map_ru_upper[] = {
     "\xD0\xAF", "\xD0\xA7", "\xD0\xA1", "\xD0\x9C", "\xD0\x98", "\xD0\xA2", "\xD0\xAC", "\xD0\x91", "\xD0\xAE", "\xD0\xAA",
     ".", "\n", LV_SYMBOL_KEYBOARD, "EN", ",", " ", "-", LV_SYMBOL_OK, ""};
 
+static const char *const kb_map_special[] = {"abc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "/",
+                                              LV_SYMBOL_BACKSPACE, "\n", "abc", "@", "#", "$", "%", "^", "&",
+                                              "*", "(", ")", "~", "\"", LV_SYMBOL_NEW_LINE, "\n", "!", "-", "+",
+                                              "=", "{", "}", "[", "]", "\\", "|", "<", ">", ":", "\n",
+                                              LV_SYMBOL_KEYBOARD, "RU", ",", " ", ".", LV_SYMBOL_OK, ""};
+
 static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
     KEYBOARD_BTN_ACTION(5),
     KEYBOARD_BTN(4),
@@ -221,6 +238,7 @@ static void configureKeyboardLayouts(lv_obj_t *keyboard)
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER, kb_map_en_upper, kb_ctrl_map);
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_USER_1, kb_map_ru_lower, kb_ctrl_map);
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_USER_2, kb_map_ru_upper, kb_ctrl_map);
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_SPECIAL, kb_map_special, kb_ctrl_map);
 }
 
 static void syncVirtualKeyboardLayout(lv_obj_t *keyboard)
@@ -632,6 +650,11 @@ void TFTView_320x240::init_screens(void)
 
     screensInitialised = true;
     state = MeshtasticView::eInitDone;
+
+#ifdef HAS_CUSTOM_APPS
+    createAppsUI();
+#endif
+
     ILOG_DEBUG("TFTView_320x240 init done.");
 }
 
@@ -7342,7 +7365,53 @@ void TFTView_320x240::showKeyboard(lv_obj_t *textArea)
         lv_anim_set_path_cb(&a2, lv_anim_path_linear);
         lv_anim_start(&a2);
     } else {
-        if (text_coords.y1 > kb_h + 30) {
+        // Check if textarea is inside appsPanel (custom app)
+        bool isAppTextarea = false;
+        if (appsPanel) {
+            lv_obj_t *ancestor = lv_obj_get_parent(textArea);
+            while (ancestor) {
+                if (ancestor == appsPanel) { isAppTextarea = true; break; }
+                ancestor = lv_obj_get_parent(ancestor);
+            }
+        }
+
+        if (isAppTextarea && appsPanel) {
+            // Save original panel position on first call
+            lv_area_t panel_coords;
+            lv_obj_get_coords(appsPanel, &panel_coords);
+            if (appsPanelOrigY < 0)
+                appsPanelOrigY = panel_coords.y1;
+
+            // Skip re-animation if panel is already shifted up
+            if (panel_coords.y1 < appsPanelOrigY) {
+                // Already shifted — just rebind textarea
+                lv_keyboard_set_textarea(objects.keyboard, textArea);
+                lv_obj_move_foreground(objects.keyboard);
+                return;
+            }
+
+            // Animate apps panel up and keyboard from bottom
+            static auto panelAnimCB = [](void *var, int32_t val) { lv_obj_set_y((lv_obj_t *)var, val); };
+            static auto kbdAnimCB = [](void *var, int32_t val) { lv_obj_set_y((lv_obj_t *)var, val); };
+
+            lv_anim_t aa1;
+            lv_anim_init(&aa1);
+            lv_anim_set_var(&aa1, appsPanel);
+            lv_anim_set_exec_cb(&aa1, panelAnimCB);
+            lv_anim_set_values(&aa1, appsPanelOrigY, appsPanelOrigY - (int32_t)kb_h);
+            lv_anim_set_duration(&aa1, 300);
+            lv_anim_set_path_cb(&aa1, lv_anim_path_linear);
+            lv_anim_start(&aa1);
+
+            lv_anim_t aa2;
+            lv_anim_init(&aa2);
+            lv_anim_set_var(&aa2, objects.keyboard);
+            lv_anim_set_exec_cb(&aa2, kbdAnimCB);
+            lv_anim_set_values(&aa2, v, v - kb_h);
+            lv_anim_set_duration(&aa2, 300);
+            lv_anim_set_path_cb(&aa2, lv_anim_path_linear);
+            lv_anim_start(&aa2);
+        } else if (text_coords.y1 > kb_h + 30) {
             // if enough place above put under top panel
             lv_obj_set_pos(objects.keyboard, 0, 28);
         } else if ((text_coords.y1 + 10) > v / 2) {
@@ -7354,6 +7423,7 @@ void TFTView_320x240::showKeyboard(lv_obj_t *textArea)
         }
     }
     lv_keyboard_set_textarea(objects.keyboard, textArea);
+    lv_obj_move_foreground(objects.keyboard);
 }
 
 void TFTView_320x240::hideKeyboard(lv_obj_t *panel)
@@ -7388,6 +7458,34 @@ void TFTView_320x240::hideKeyboard(lv_obj_t *panel)
         lv_anim_set_path_cb(&a2, lv_anim_path_linear);
         lv_anim_set_deleted_cb(&a2, deleted_cb);
         lv_anim_start(&a2);
+    } else if (panel == appsPanel && appsPanel && appsPanelOrigY >= 0) {
+        uint32_t v = lv_display_get_vertical_resolution(displaydriver->getDisplay());
+
+        static auto panelAnimCB = [](void *var, int32_t val) { lv_obj_set_y((lv_obj_t *)var, val); };
+        static auto kbdAnimCB = [](void *var, int32_t val) { lv_obj_set_y((lv_obj_t *)var, val); };
+        static auto deleted_cb = [](_lv_anim_t *) { lv_obj_add_flag(objects.keyboard, LV_OBJ_FLAG_HIDDEN); };
+
+        lv_area_t panel_coords;
+        lv_obj_get_coords(appsPanel, &panel_coords);
+
+        lv_anim_t ab1;
+        lv_anim_init(&ab1);
+        lv_anim_set_var(&ab1, appsPanel);
+        lv_anim_set_exec_cb(&ab1, panelAnimCB);
+        lv_anim_set_values(&ab1, panel_coords.y1, appsPanelOrigY);
+        lv_anim_set_duration(&ab1, 300);
+        lv_anim_set_path_cb(&ab1, lv_anim_path_linear);
+        lv_anim_start(&ab1);
+
+        lv_anim_t ab2;
+        lv_anim_init(&ab2);
+        lv_anim_set_var(&ab2, objects.keyboard);
+        lv_anim_set_exec_cb(&ab2, kbdAnimCB);
+        lv_anim_set_values(&ab2, kb_coords.y1, (int32_t)v);
+        lv_anim_set_duration(&ab2, 300);
+        lv_anim_set_path_cb(&ab2, lv_anim_path_linear);
+        lv_anim_set_deleted_cb(&ab2, deleted_cb);
+        lv_anim_start(&ab2);
     }
 }
 
@@ -7863,6 +7961,11 @@ void TFTView_320x240::task_handler(void)
         if (map)
             map->task_handler();
 
+#ifdef HAS_CUSTOM_APPS
+        if (appManager)
+            appManager->tick((uint32_t)(curtime * 1000));
+#endif
+
         if (curtime - lastrun1 >= 1) { // call every 1s
             if (map) {
                 updateLocationMap(THIS->map->getObjectsOnMap());
@@ -7921,6 +8024,223 @@ void TFTView_320x240::task_handler(void)
         }
     }
 }
+
+// === Custom Apps Integration ===
+
+#ifdef HAS_CUSTOM_APPS
+void TFTView_320x240::createAppsUI()
+{
+    appManager = new AppManager();
+    appContext = new AppContext(controller, this);
+
+    // Register built-in apps
+    appManager->registerApp(new TelegramApp());
+    appManager->registerApp(new MqttSettingsApp());
+
+#ifdef HAS_SCRIPTING_BERRY
+    {
+        BerryEngine *berryEngine = new BerryEngine();
+        // Built-in Berry apps
+        appManager->registerApp(new ScriptApp("Hello Mesh", "/apps/scripts/hello_mesh.be", berryEngine));
+        // Auto-load user scripts from filesystem
+        int loaded = loadScriptApps(appManager, berryEngine);
+        ILOG_INFO("ScriptLoader: auto-loaded %d Berry script(s)", loaded);
+    }
+#endif
+
+    appContext->setKeyboardRequestFn(
+        [](lv_obj_t *ta, void *ctx) {
+            TFTView_320x240 *self = static_cast<TFTView_320x240 *>(ctx);
+            lv_obj_remove_flag(objects.keyboard, LV_OBJ_FLAG_HIDDEN);
+            self->showKeyboard(ta);
+        },
+        this);
+
+    // Add keyboard dismiss handler: when X or checkmark pressed, hide keyboard and restore appsPanel
+    lv_obj_add_event_cb(
+        objects.keyboard,
+        [](lv_event_t *e) {
+            TFTView_320x240 *self = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+            if (self && self->appsPanel && !lv_obj_has_flag(self->appsPanel, LV_OBJ_FLAG_HIDDEN)) {
+                self->hideKeyboard(self->appsPanel);
+            }
+        },
+        LV_EVENT_CANCEL, this);
+    lv_obj_add_event_cb(
+        objects.keyboard,
+        [](lv_event_t *e) {
+            TFTView_320x240 *self = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+            if (self && self->appsPanel && !lv_obj_has_flag(self->appsPanel, LV_OBJ_FLAG_HIDDEN)) {
+                self->hideKeyboard(self->appsPanel);
+            }
+        },
+        LV_EVENT_READY, this);
+
+    appManager->initAll(appContext);
+
+    // Create apps navigation button in the button column
+    lv_obj_t *btnParent = lv_obj_get_parent(objects.home_button);
+
+    // Shrink existing 6 buttons and reduce gap to fit a 7th button
+    // Original: 6×36 + 5×4 + 2 = 238px (barely fits 240px)
+    // With 7th: need 7×30 + 6×2 + 2 = 224px
+    lv_obj_set_style_pad_row(btnParent, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(btnParent); i++) {
+        lv_obj_set_size(lv_obj_get_child(btnParent, i), 30, 30);
+    }
+
+    appsButton = lv_btn_create(btnParent);
+    lv_obj_set_size(appsButton, 30, 30);
+    lv_obj_add_flag(appsButton, LV_OBJ_FLAG_SCROLL_CHAIN);
+    lv_obj_remove_flag(appsButton, (lv_obj_flag_t)(LV_OBJ_FLAG_PRESS_LOCK | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
+    add_style_main_button_style(appsButton);
+    lv_obj_set_style_border_width(appsButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_image_src(appsButton, &img_apps_play_button_image, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Create top panel (title bar area)
+    lv_obj_t *mainScreen = lv_obj_get_parent(objects.home_panel);
+    appsTopPanel = lv_obj_create(mainScreen);
+    lv_obj_set_pos(appsTopPanel, LV_PCT(12), 0);
+    lv_obj_set_size(appsTopPanel, LV_PCT(88), LV_PCT(10));
+    lv_obj_clear_flag(appsTopPanel, LV_OBJ_FLAG_SCROLLABLE);
+    add_style_panel_style(appsTopPanel);
+    lv_obj_add_flag(appsTopPanel, LV_OBJ_FLAG_HIDDEN);
+
+    appsTopLabel = lv_label_create(appsTopPanel);
+    lv_label_set_text(appsTopLabel, "Apps");
+    lv_obj_center(appsTopLabel);
+
+    // Create apps menu panel (app selection list)
+    appsMenuPanel = lv_obj_create(mainScreen);
+    lv_obj_set_pos(appsMenuPanel, LV_PCT(12), LV_PCT(10));
+    lv_obj_set_size(appsMenuPanel, LV_PCT(88), LV_PCT(90));
+    add_style_panel_style(appsMenuPanel);
+    lv_obj_set_style_layout(appsMenuPanel, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_flex_flow(appsMenuPanel, LV_FLEX_FLOW_COLUMN, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_row(appsMenuPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(appsMenuPanel, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_flag(appsMenuPanel, LV_OBJ_FLAG_HIDDEN);
+
+    // Populate menu with registered apps
+    for (uint8_t i = 0; i < appManager->getAppCount(); i++) {
+        ICustomApp *app = appManager->getApp(i);
+        if (!app)
+            continue;
+        lv_obj_t *btn = lv_btn_create(appsMenuPanel);
+        lv_obj_set_width(btn, LV_PCT(100));
+        lv_obj_set_style_pad_all(btn, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        lv_obj_t *label = lv_label_create(btn);
+        // Show icon + name if icon available
+        const char *icon = app->getIcon();
+        if (icon && icon[0] != '\0') {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%s  %s", icon, app->getName());
+            lv_label_set_text(label, buf);
+        } else {
+            lv_label_set_text(label, app->getName());
+        }
+        lv_obj_center(label);
+
+        // Store app index in user_data
+        lv_obj_set_user_data(btn, (void *)(uintptr_t)i);
+        lv_obj_add_event_cb(btn, ui_event_AppMenuItemClicked, LV_EVENT_CLICKED, this);
+        lv_group_add_obj(lv_group_get_default(), btn);
+    }
+
+    // Create apps content panel (where actual app UI lives)
+    appsPanel = lv_obj_create(mainScreen);
+    lv_obj_set_pos(appsPanel, LV_PCT(12), LV_PCT(10));
+    lv_obj_set_size(appsPanel, LV_PCT(88), LV_PCT(90));
+    lv_obj_clear_flag(appsPanel, LV_OBJ_FLAG_SCROLLABLE);
+    add_style_panel_style(appsPanel);
+    lv_obj_add_flag(appsPanel, LV_OBJ_FLAG_HIDDEN);
+
+    // Add click handler for textarea focus -> show keyboard
+    lv_obj_add_event_cb(appsPanel, ui_event_AppsTextareaClicked, LV_EVENT_CLICKED, this);
+
+    // Add button event
+    lv_obj_add_event_cb(appsButton, ui_event_AppsButton, LV_EVENT_CLICKED, this);
+
+    // Add to input group for keyboard navigation
+    lv_group_add_obj(lv_group_get_default(), appsButton);
+}
+
+void TFTView_320x240::showAppsMenu()
+{
+    // Hide app content, show menu
+    if (appsPanel)
+        lv_obj_add_flag(appsPanel, LV_OBJ_FLAG_HIDDEN);
+    if (appsMenuPanel)
+        lv_obj_remove_flag(appsMenuPanel, LV_OBJ_FLAG_HIDDEN);
+    if (appsTopLabel)
+        lv_label_set_text(appsTopLabel, "Apps");
+    if (appManager)
+        appManager->hideCurrentApp();
+}
+
+void TFTView_320x240::launchApp(uint8_t index)
+{
+    if (!appManager || index >= appManager->getAppCount())
+        return;
+    // Hide menu, show app content
+    if (appsMenuPanel)
+        lv_obj_add_flag(appsMenuPanel, LV_OBJ_FLAG_HIDDEN);
+    if (appsPanel)
+        lv_obj_remove_flag(appsPanel, LV_OBJ_FLAG_HIDDEN);
+
+    // Update activePanel so sidebar switching hides the correct panel
+    activePanel = appsPanel;
+
+    appManager->showApp(index, appsPanel);
+
+    // Update title to app name
+    ICustomApp *app = appManager->getApp(index);
+    if (appsTopLabel && app)
+        lv_label_set_text(appsTopLabel, app->getName());
+}
+
+void TFTView_320x240::ui_event_AppsTextareaClicked(lv_event_t *e)
+{
+    TFTView_320x240 *self = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+    if (!self)
+        return;
+    lv_obj_t *target = (lv_obj_t *)lv_event_get_target(e);
+    // Check if the clicked object is a textarea
+    if (lv_obj_check_type(target, &lv_textarea_class)) {
+        lv_obj_remove_flag(objects.keyboard, LV_OBJ_FLAG_HIDDEN);
+        self->showKeyboard(target);
+    }
+}
+
+void TFTView_320x240::ui_event_AppMenuItemClicked(lv_event_t *e)
+{
+    TFTView_320x240 *self = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+    if (!self)
+        return;
+    lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+    uint8_t index = (uint8_t)(uintptr_t)lv_obj_get_user_data(btn);
+    self->launchApp(index);
+}
+
+void TFTView_320x240::ui_event_AppBackClicked(lv_event_t *e)
+{
+    TFTView_320x240 *self = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+    if (!self)
+        return;
+    self->showAppsMenu();
+}
+
+void TFTView_320x240::ui_event_AppsButton(lv_event_t *e)
+{
+    TFTView_320x240 *self = static_cast<TFTView_320x240 *>(lv_event_get_user_data(e));
+    if (self && self->activeSettings == eNone) {
+        // Show the apps menu panel (not directly an app)
+        self->showAppsMenu();
+        self->ui_set_active(self->appsButton, self->appsMenuPanel, self->appsTopPanel);
+    }
+}
+#endif // HAS_CUSTOM_APPS
 
 // === lvgl C style callbacks ===
 

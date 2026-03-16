@@ -108,6 +108,8 @@ typedef struct _ext_img_desc_t {
 
 extern const ext_img_desc_t images[90];
 
+extern const lv_img_dsc_t img_apps_grid_button_image;
+extern const lv_img_dsc_t img_apps_play_button_image;
 
 #ifdef __cplusplus
 }

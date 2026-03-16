@@ -4,6 +4,11 @@
 #include "meshtastic/clientonly.pb.h"
 #include <set>
 
+#ifdef HAS_CUSTOM_APPS
+class AppManager;
+class AppContext;
+#endif
+
 class MapPanel;
 
 /**
@@ -448,4 +453,23 @@ class TFTView_320x240 : public MeshtasticView
     };
 
     meshtastic_DeviceProfile_full db{}; // full copy of the node's configuration db (except nodeinfos) plus ui data
+
+#ifdef HAS_CUSTOM_APPS
+    AppManager *appManager = nullptr;
+    AppContext *appContext = nullptr;
+    lv_obj_t *appsButton = nullptr;
+    lv_obj_t *appsPanel = nullptr;
+    int32_t appsPanelOrigY = -1; // stored on first keyboard show
+    lv_obj_t *appsTopPanel = nullptr;
+    lv_obj_t *appsMenuPanel = nullptr;
+    lv_obj_t *appsTopLabel = nullptr;
+
+    void createAppsUI();
+    void showAppsMenu();
+    void launchApp(uint8_t index);
+    static void ui_event_AppsButton(lv_event_t *e);
+    static void ui_event_AppsTextareaClicked(lv_event_t *e);
+    static void ui_event_AppMenuItemClicked(lv_event_t *e);
+    static void ui_event_AppBackClicked(lv_event_t *e);
+#endif
 };

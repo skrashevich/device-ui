@@ -1,0 +1,9 @@
+services:
+  telegram-proxy:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./sessions:/app/sessions
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
