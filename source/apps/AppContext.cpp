@@ -15,7 +15,10 @@
 #define HAS_SPIFFS
 #endif
 
-AppContext::AppContext(ViewController *ctrl, MeshtasticView *view) : controller(ctrl), view(view) {}
+AppContext::AppContext(ViewController *ctrl, MeshtasticView *view)
+    : controller(ctrl), view(view), myNodeNum(view ? view->getMyNodeNum() : 0)
+{
+}
 
 void AppContext::sendTextMessage(uint32_t to, uint8_t channel, const char *msg)
 {
@@ -33,7 +36,7 @@ void AppContext::broadcastMessage(uint8_t channel, const char *msg)
 
 uint32_t AppContext::getMyNodeNum() const
 {
-    return myNodeNum;
+    return view ? view->getMyNodeNum() : myNodeNum;
 }
 
 void AppContext::setKeyboardRequestFn(KeyboardRequestFn fn, void *ctx)

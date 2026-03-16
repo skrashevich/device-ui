@@ -20,7 +20,7 @@ void ScriptUIBindings_register(BerryEngine *engine, lv_obj_t *root);
  * Call from ICustomApp::destroy() before deleting the root widget.
  * Does NOT call lv_obj_del — LVGL deletes children automatically with the root.
  */
-void ScriptUIBindings_destroy();
+void ScriptUIBindings_destroy(BerryEngine *engine);
 
 #endif // HAS_SCRIPTING_BERRY
 #endif // HAS_CUSTOM_APPS

@@ -4,11 +4,10 @@
 #ifdef HAS_CUSTOM_APPS
 #include "apps/AppManager.h"
 #include "apps/AppContext.h"
+#include "apps/builtin/HelloApp.h"
 #include "apps/builtin/TelegramApp.h"
 #include "apps/builtin/MqttSettingsApp.h"
 #ifdef HAS_SCRIPTING_BERRY
-#include "apps/BerryEngine.h"
-#include "apps/ScriptApp.h"
 #include "apps/ScriptLoader.h"
 #endif
 #endif
@@ -6010,6 +6009,12 @@ void TFTView_320x240::packetReceived(const meshtastic_MeshPacket &p)
         updateSignalStrength(p.rx_rssi, p.rx_snr);
     }
     updateStatistics(p);
+
+#ifdef HAS_CUSTOM_APPS
+    if (appManager) {
+        appManager->dispatchPacket(p);
+    }
+#endif
 }
 
 void TFTView_320x240::notifyConnected(const char *info)
@@ -6819,6 +6824,20 @@ void TFTView_320x240::updateMQTTModule(const meshtastic_ModuleConfig_MQTTConfig 
         Themes::recolorButton(objects.home_mqtt_button, false);
         Themes::recolorText(objects.home_mqtt_label, false);
     }
+
+#ifdef HAS_CUSTOM_APPS
+    if (appManager) {
+        for (uint8_t i = 0; i < appManager->getAppCount(); i++) {
+            MqttSettingsApp *mqttApp = dynamic_cast<MqttSettingsApp *>(appManager->getApp(i));
+            if (!mqttApp)
+                continue;
+
+            mqttApp->updateConfig(cfg.enabled, cfg.address, cfg.tls_enabled ? 8883 : 1883, cfg.username, cfg.password,
+                                  cfg.root, cfg.tls_enabled, cfg.json_enabled);
+            break;
+        }
+    }
+#endif
 }
 
 void TFTView_320x240::updateExtNotificationModule(const meshtastic_ModuleConfig_ExternalNotificationConfig &cfg)
@@ -8034,16 +8053,14 @@ void TFTView_320x240::createAppsUI()
     appContext = new AppContext(controller, this);
 
     // Register built-in apps
+    appManager->registerApp(new HelloApp());
     appManager->registerApp(new TelegramApp());
     appManager->registerApp(new MqttSettingsApp());
 
 #ifdef HAS_SCRIPTING_BERRY
     {
-        BerryEngine *berryEngine = new BerryEngine();
-        // Built-in Berry apps
-        appManager->registerApp(new ScriptApp("Hello Mesh", "/apps/scripts/hello_mesh.be", berryEngine));
-        // Auto-load user scripts from filesystem
-        int loaded = loadScriptApps(appManager, berryEngine);
+        // Auto-load user scripts from the mounted app filesystem.
+        int loaded = loadScriptApps(appManager);
         ILOG_INFO("ScriptLoader: auto-loaded %d Berry script(s)", loaded);
     }
 #endif

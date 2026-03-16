@@ -12,9 +12,18 @@ ScriptApp::ScriptApp(const char *name, const char *scriptPath, ScriptEngine *eng
 {
 }
 
+ScriptApp::~ScriptApp()
+{
+    destroy();
+}
+
 bool ScriptApp::init(AppContext *ctx)
 {
     this->ctx = ctx;
+    if (!engine) {
+        ILOG_ERROR("ScriptApp '%s': no scripting engine provided", appName.c_str());
+        return false;
+    }
 
     // Initialize engine if not already done
     if (!engine->init(32 * 1024)) { // 32KB heap
@@ -112,14 +121,27 @@ void ScriptApp::onMeshPacket(const meshtastic_MeshPacket &p)
 
 void ScriptApp::destroy()
 {
-    if (loaded) {
+    if (loaded && engine) {
         engine->callFunction("app_destroy");
     }
-    ScriptUIBindings_destroy();
+
+    BerryEngine *berry = dynamic_cast<BerryEngine *>(engine);
+    if (berry) {
+        ScriptUIBindings_destroy(berry);
+    }
+
     if (panel) {
         lv_obj_del(panel);
         panel = nullptr;
     }
+
+    if (engine) {
+        engine->destroy();
+        delete engine;
+        engine = nullptr;
+    }
+
+    ctx = nullptr;
     loaded = false;
 }
 

@@ -4,14 +4,58 @@
 #include "apps/BerryEngine.h"
 #include "apps/AppContext.h"
 #include "util/ILog.h"
+#include <string>
 
 // Berry C API
 #include "berry.h"
+
+#if defined(ARCH_PORTDUINO)
+#include "PortduinoFS.h"
+#define BERRY_SCRIPT_FS PortduinoFS
+#elif __has_include("LittleFS.h")
+#include "LittleFS.h"
+#define BERRY_SCRIPT_FS LittleFS
+#elif __has_include(<LittleFS.h>)
+#include <LittleFS.h>
+#define BERRY_SCRIPT_FS LittleFS
+#elif __has_include("SPIFFS.h")
+#include "SPIFFS.h"
+#define BERRY_SCRIPT_FS SPIFFS
+#elif __has_include(<SPIFFS.h>)
+#include <SPIFFS.h>
+#define BERRY_SCRIPT_FS SPIFFS
+#else
+#define BERRY_SCRIPT_NO_FS
+#endif
 
 #if __has_include(<HTTPClient.h>)
 #include <HTTPClient.h>
 #define HAS_HTTP_CLIENT 1
 #endif
+
+static bool readScriptFromFs(const char *path, std::string &script)
+{
+#ifdef BERRY_SCRIPT_NO_FS
+    (void)path;
+    script.clear();
+    return false;
+#else
+    File file = BERRY_SCRIPT_FS.open(path, FILE_READ);
+    if (!file)
+        return false;
+
+    script.clear();
+    script.reserve((size_t)file.size());
+    while (file.available()) {
+        int ch = file.read();
+        if (ch < 0)
+            break;
+        script.push_back((char)ch);
+    }
+    file.close();
+    return true;
+#endif
+}
 
 BerryEngine::BerryEngine() : vm(nullptr), appCtx(nullptr), initialized(false) {}
 
@@ -43,7 +87,15 @@ bool BerryEngine::loadScript(const char *path)
     if (!initialized || !vm)
         return false;
 
-    int result = be_loadfile(vm, path);
+    std::string script;
+    int result = 0;
+
+    if (readScriptFromFs(path, script)) {
+        result = be_loadbuffer(vm, path, script.c_str(), script.size());
+    } else {
+        result = be_loadfile(vm, path);
+    }
+
     if (result != 0) {
         ILOG_ERROR("BerryEngine: failed to load '%s': %s", path, be_tostring(vm, -1));
         be_pop(vm, 1);

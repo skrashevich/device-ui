@@ -8,8 +8,10 @@ build
 build-linux
 .DS_Store
 _codeql_detected_source_root
+!build-verify
 build-*
 .pip-cache
+.berry-cache
 .venv
 sessions
 config.yaml
@@ -31,3 +33,4 @@ __pycache__
 .omc
 
 */**/.omc
+.omc/

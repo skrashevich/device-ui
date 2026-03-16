@@ -19,6 +19,7 @@ class ScriptApp : public ICustomApp
 {
   public:
     ScriptApp(const char *name, const char *scriptPath, ScriptEngine *engine);
+    ~ScriptApp() override;
 
     const char *getName() const override { return appName.c_str(); }
     const char *getIcon() const override { return LV_SYMBOL_FILE; }
@@ -33,10 +34,10 @@ class ScriptApp : public ICustomApp
   private:
     std::string appName;
     std::string scriptPath;
-    ScriptEngine *engine;
-    AppContext *ctx;
-    lv_obj_t *panel;
-    bool loaded;
+    ScriptEngine *engine = nullptr;
+    AppContext *ctx = nullptr;
+    lv_obj_t *panel = nullptr;
+    bool loaded = false;
 };
 
 #endif // HAS_SCRIPTING_BERRY
