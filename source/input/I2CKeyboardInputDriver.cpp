@@ -713,10 +713,41 @@ void TLoraPagerKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *in
 
         data->state = LV_INDEV_STATE_PRESSED;
 
-        // In RU layout mode, map latin key output to Cyrillic when entering text.
-        // Keep symbol layer unchanged to preserve punctuation/number input.
-        if (modifierState != 2 && TDeckKeyboardInputDriver::isRussianLayoutEnabled()) {
-            const char *ruChar = mapLatinToRussianUtf8(static_cast<uint32_t>(static_cast<unsigned char>(keyChar)));
+        // In RU layout mode, map key output to Cyrillic when entering text.
+        if (TDeckKeyboardInputDriver::isRussianLayoutEnabled()) {
+            const char *ruChar = nullptr;
+
+            if (modifierState == 2) {
+                // Sym layer: map specific Sym+key combos to missing Russian letters
+                // These 7 letters are inaccessible via normal keys on T-Pager
+                switch (keyChar) {
+                case ';':
+                    ruChar = "\xD0\xB6";
+                    break; // Sym+C -> ж
+                case '\'':
+                    ruChar = "\xD1\x8D";
+                    break; // Sym+J -> э
+                case ',':
+                    ruChar = "\xD0\xB1";
+                    break; // Sym+N -> б
+                case '.':
+                    ruChar = "\xD1\x8E";
+                    break; // Sym+M -> ю
+                case ':':
+                    ruChar = "\xD1\x85";
+                    break; // Sym+H -> х
+                case '"':
+                    ruChar = "\xD1\x8A";
+                    break; // Sym+K -> ъ
+                case '=':
+                    ruChar = "\xD1\x91";
+                    break; // Sym+G -> ё
+                }
+            } else {
+                // Normal/Shift layer: standard ЙЦУКЕН mapping
+                ruChar = mapLatinToRussianUtf8(static_cast<uint32_t>(static_cast<unsigned char>(keyChar)));
+            }
+
             if (ruChar && insertIntoFocusedTextarea(ruChar)) {
                 data->state = LV_INDEV_STATE_RELEASED;
                 data->key = 0;
