@@ -1042,6 +1042,65 @@ void TFTView_480x222::apply_hotfix(void)
     lv_obj_add_flag(objects.zoom_out_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.gps_lock_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.nav_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    // Apply focus highlight styles for encoder/keyboard navigation
+    lv_style_t *focusBtn = Themes::getFocusStyleBtn();
+    lv_style_t *focusDd = Themes::getFocusStyleDropdown();
+    lv_style_t *focusSlider = Themes::getFocusStyleSliderKnob();
+    lv_style_t *focusTa = Themes::getFocusStyleTextarea();
+    lv_style_t *focusSw = Themes::getFocusStyleSwitch();
+
+    // Settings dropdowns
+    lv_obj_add_style(objects.settings_device_role_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_region_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_modem_preset_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_language_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_theme_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_mouse_input_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_reset_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_backup_restore_dropdown, focusDd, LV_STATE_FOCUSED);
+
+    // Settings sliders
+    lv_obj_add_style(objects.brightness_slider, focusSlider, LV_PART_KNOB | LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.screen_timeout_slider, focusSlider, LV_PART_KNOB | LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.frequency_slot_slider, focusSlider, LV_PART_KNOB | LV_STATE_FOCUSED);
+
+    // Settings switches
+    lv_obj_add_style(objects.settings_screen_lock_switch, focusSw, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_alert_buzzer_switch, focusSw, LV_STATE_FOCUSED);
+
+    // Text areas
+    lv_obj_add_style(objects.message_input_area, focusTa, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_user_short_textarea, focusTa, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_user_long_textarea, focusTa, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_wifi_ssid_textarea, focusTa, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_wifi_password_textarea, focusTa, LV_STATE_FOCUSED);
+
+    // Settings buttons (green border on focus)
+    lv_obj_add_style(objects.basic_settings_user_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_role_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_region_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_modem_preset_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_channel_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_wifi_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_language_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_timeout_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_screen_lock_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_brightness_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_theme_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_input_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_alert_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_backup_restore_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_reset_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.basic_settings_reboot_button, focusBtn, LV_STATE_FOCUSED);
+
+    // Map buttons
+    lv_obj_add_style(objects.arrow_up_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.arrow_down_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.arrow_left_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.arrow_right_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.zoom_in_button, focusBtn, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.zoom_out_button, focusBtn, LV_STATE_FOCUSED);
 }
 
 void TFTView_480x222::updateTheme(void)
@@ -1122,6 +1181,12 @@ void TFTView_480x222::ui_events_init(void)
 
     // Register callback for backspace -> home navigation
     I2CKeyboardInputDriver::setNavigateHomeCallback([]() {
+        // If message popup is visible, dismiss it instead of navigating home
+        if (!lv_obj_has_flag(objects.msg_popup_panel, LV_OBJ_FLAG_HIDDEN)) {
+            THIS->hideMessagePopup();
+            THIS->setGroupFocus(THIS->activePanel);
+            return;
+        }
         if (objects.home_button) {
             lv_group_focus_obj(objects.home_button);
         }
@@ -1463,20 +1528,29 @@ void TFTView_480x222::ui_event_GlobalKeyHandler(lv_event_t *e)
             }
         } else if (key == LV_KEY_NEXT || key == LV_KEY_PREV) {
             // Screen tab switching: cycle through main screens
-            lv_obj_t *tabs[] = {
-                objects.home_button, objects.nodes_button, objects.groups_button,
-                objects.messages_button, objects.map_button, objects.settings_button
-            };
-            const int numTabs = 6;
-
             // Only switch tabs when we're at the main button level (not inside a sub-panel)
             if (THIS->activeSettings != eNone)
                 return;
 
+            struct TabMapping {
+                lv_obj_t *button;
+                lv_obj_t *panel;
+                lv_obj_t *topPanel;
+            };
+            TabMapping tabMap[] = {
+                {objects.home_button, objects.home_panel, objects.top_panel},
+                {objects.nodes_button, objects.nodes_panel, objects.top_nodes_panel},
+                {objects.groups_button, objects.groups_panel, objects.top_groups_panel},
+                {objects.messages_button, objects.chats_panel, objects.top_chats_panel},
+                {objects.map_button, objects.map_panel, objects.top_map_panel},
+                {objects.settings_button, objects.controller_panel, objects.top_settings_panel}
+            };
+            const int numTabs = 6;
+
             // Find current active tab
             int currentIdx = -1;
             for (int i = 0; i < numTabs; i++) {
-                if (tabs[i] == THIS->activeButton) {
+                if (tabMap[i].button == THIS->activeButton) {
                     currentIdx = i;
                     break;
                 }
@@ -1489,7 +1563,7 @@ void TFTView_480x222::ui_event_GlobalKeyHandler(lv_event_t *e)
                 else
                     nextIdx = (currentIdx - 1 + numTabs) % numTabs;
 
-                lv_event_send(tabs[nextIdx], LV_EVENT_CLICKED, NULL);
+                THIS->ui_set_active(tabMap[nextIdx].button, tabMap[nextIdx].panel, tabMap[nextIdx].topPanel);
             }
         }
     }
@@ -1790,11 +1864,12 @@ void TFTView_480x222::ui_event_MsgPopupButton(lv_event_t *e)
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *target = lv_event_get_target_obj(e);
 
-    // Handle keyboard events
+    // Handle keyboard events - any key dismisses popup, ENTER navigates to chat
     if (code == LV_EVENT_KEY) {
         uint32_t key = lv_event_get_key(e);
         if (key == LV_KEY_ENTER) {
             // Navigate to the chat (same as clicking button)
+            THIS->hideMessagePopup();
             uint32_t channelOrNode = (unsigned long)objects.msg_popup_button->user_data;
             if (channelOrNode < c_max_channels) {
                 uint8_t ch = (uint8_t)channelOrNode;
@@ -1803,9 +1878,10 @@ void TFTView_480x222::ui_event_MsgPopupButton(lv_event_t *e)
                 uint32_t nodeNum = channelOrNode;
                 THIS->showMessages(nodeNum);
             }
-        } else if (key == LV_KEY_BACKSPACE || key == LV_KEY_ESC) {
-            // Dismiss the popup
+        } else {
+            // Any other key dismisses the popup (space, backspace, ESC, q, etc.)
             THIS->hideMessagePopup();
+            THIS->setGroupFocus(THIS->activePanel);
         }
         return;
     }

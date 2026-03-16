@@ -194,6 +194,19 @@ It tracks upstream updates and contains fork-specific changes focused on map loa
     - [x] allow bluetooth connection via 'Programming Mode'
     - [ ] I2S Audio support
 
+### :pager: T-Lora Pager
+
+    - [x] Firmware project integration
+    - [x] T-Pager UI
+      - [x] 480x222 display view
+      - [x] TCA8418 keyboard input handling
+      - [x] Rotary encoder support with acceleration
+      - [x] Keyboard layout toggle (EN/RU)
+    - [x] I2C keyboard controller support
+    - [x] Non-touchscreen keyboard-driven navigation
+
+For detailed keyboard shortcuts and encoder navigation, see [T-Pager Navigation Guide](docs/T_PAGER_NAVIGATION.md).
+
 ### :pager: DIY Mesh-Tab (see <a href="[https://github.com/valzzu/Mesh-Tab]" target="_blank">https://github.com/valzzu/Mesh-Tab</a>)
 
     - [x] Mesh-Tab firmware support (320x240 and 320x480)
