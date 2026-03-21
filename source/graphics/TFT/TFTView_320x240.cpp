@@ -1483,7 +1483,7 @@ void TFTView_320x240::ui_event_GlobalKeyHandler(lv_event_t *e)
                 else
                     nextIdx = (currentIdx - 1 + numTabs) % numTabs;
 
-                lv_event_send(tabs[nextIdx], LV_EVENT_CLICKED, NULL);
+                lv_obj_send_event(tabs[nextIdx], LV_EVENT_CLICKED, NULL);
             }
         }
     }
