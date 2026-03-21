@@ -58,7 +58,7 @@ class LGFX_TLORA_PAGER : public lgfx::LGFX_Device
             cfg.invert = true;
             cfg.rgb_order = false;
             cfg.dlen_16bit = false;
-            cfg.bus_shared = false;
+            cfg.bus_shared = true; // SD card shares SPI bus
 
             _panel_instance.config(cfg);
         }

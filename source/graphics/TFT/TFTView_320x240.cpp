@@ -172,6 +172,8 @@ static const lv_buttonmatrix_ctrl_t kb_ctrl_map[] = {
     KEYBOARD_BTN_ACTION(2),
 };
 
+static lv_obj_t *symIndicator = nullptr;
+
 constexpr const char *MAP_PROVIDER_PREF_PATH = "/map-provider.cfg";
 constexpr const char *MAP_PROVIDER_OSM = "osm";
 constexpr const char *MAP_PROVIDER_YANDEX = "yandex";
@@ -630,6 +632,14 @@ void TFTView_320x240::init_screens(void)
 
     updateFreeMem();
 
+    // Create sym/alt modifier indicator (hidden by default)
+    symIndicator = lv_label_create(objects.main_screen);
+    lv_label_set_text(symIndicator, "S");
+    lv_obj_set_style_text_color(symIndicator, lv_color_hex(0xFF8C00), LV_PART_MAIN); // Orange
+    lv_obj_set_style_text_font(symIndicator, &ui_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_align(symIndicator, LV_ALIGN_BOTTOM_LEFT, 5, -5);
+    lv_obj_add_flag(symIndicator, LV_OBJ_FLAG_HIDDEN);
+
     screensInitialised = true;
     state = MeshtasticView::eInitDone;
     ILOG_DEBUG("TFTView_320x240 init done.");
@@ -845,6 +855,49 @@ void TFTView_320x240::apply_hotfix(void)
 
     lv_obj_add_style(objects.settings_backup_checkbox, &style_radio, LV_PART_INDICATOR);
     lv_obj_add_style(objects.settings_restore_checkbox, &style_radio, LV_PART_INDICATOR);
+
+    // Encoder navigation: ensure settings buttons scroll into view when focused
+    lv_obj_add_flag(objects.basic_settings_user_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_role_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_region_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_modem_preset_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_channel_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_wifi_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_language_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_timeout_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_screen_lock_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_brightness_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_theme_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_input_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_alert_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_backup_restore_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_reset_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.basic_settings_reboot_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    // Settings sub-panel widgets also need scroll-on-focus
+    lv_obj_add_flag(objects.settings_device_role_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_region_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_modem_preset_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_language_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_theme_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_mouse_input_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_reset_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_backup_restore_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.brightness_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.screen_timeout_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.frequency_slot_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_screen_lock_switch, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_alert_buzzer_switch, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    // Map navigation buttons - ensure they're focusable via encoder
+    lv_obj_add_flag(objects.arrow_up_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.arrow_down_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.arrow_left_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.arrow_right_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.zoom_in_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.zoom_out_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.gps_lock_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.nav_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 }
 
 void TFTView_320x240::updateTheme(void)
@@ -906,6 +959,51 @@ void TFTView_320x240::ui_events_init(void)
     lv_obj_add_event_cb(objects.map_button, this->ui_event_MapButton, LV_EVENT_ALL, NULL);
     lv_obj_add_event_cb(objects.settings_button, this->ui_event_SettingsButton, LV_EVENT_ALL, NULL);
 
+    // Global key handler for screen navigation
+    lv_obj_add_event_cb(objects.main_screen, this->ui_event_GlobalKeyHandler, LV_EVENT_KEY, NULL);
+
+    // Register callback for backspace -> home navigation
+    I2CKeyboardInputDriver::setNavigateHomeCallback([]() {
+        // If message popup is visible, dismiss it instead of navigating home
+        if (!lv_obj_has_flag(objects.msg_popup_panel, LV_OBJ_FLAG_HIDDEN)) {
+            THIS->hideMessagePopup();
+            THIS->setGroupFocus(THIS->activePanel);
+            return;
+        }
+        if (objects.home_button) {
+            lv_group_focus_obj(objects.home_button);
+        }
+    });
+
+    // Register callback for alt+encoder scrolling in active panel
+    I2CKeyboardInputDriver::setScrollCallback([](int direction) {
+        if (!THIS) return;
+        int32_t scroll_amount = 80;
+        // direction > 0 means scroll down (content moves up), < 0 means scroll up
+        int32_t dy = direction > 0 ? -scroll_amount : scroll_amount;
+        lv_obj_t *panel = THIS->activePanel;
+        if (panel == objects.messages_panel) {
+            if (THIS->activeMsgContainer)
+                lv_obj_scroll_by(THIS->activeMsgContainer, 0, dy, LV_ANIM_ON);
+        } else if (panel == objects.nodes_panel) {
+            lv_obj_scroll_by(objects.nodes_panel, 0, dy, LV_ANIM_ON);
+        } else if (panel == objects.groups_panel) {
+            lv_obj_scroll_by(objects.groups_panel, 0, dy, LV_ANIM_ON);
+        } else if (panel == objects.controller_panel) {
+            lv_obj_scroll_by(objects.controller_panel, 0, dy, LV_ANIM_ON);
+        }
+    });
+
+    // Register callback for sym/alt indicator
+    I2CKeyboardInputDriver::setAltIndicatorCallback([](bool active) {
+        if (symIndicator) {
+            if (active)
+                lv_obj_clear_flag(symIndicator, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(symIndicator, LV_OBJ_FLAG_HIDDEN);
+        }
+    });
+
     // home buttons
     lv_obj_add_event_cb(objects.home_mail_button, this->ui_event_EnvelopeButton, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(objects.home_nodes_button, this->ui_event_OnlineNodesButton, LV_EVENT_ALL, NULL);
@@ -935,6 +1033,7 @@ void TFTView_320x240::ui_events_init(void)
 
     // message popup
     lv_obj_add_event_cb(objects.msg_popup_button, this->ui_event_MsgPopupButton, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(objects.msg_popup_button, this->ui_event_MsgPopupButton, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(objects.msg_popup_panel, this->ui_event_MsgPopupButton, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(objects.msg_restore_button, this->ui_event_MsgRestoreButton, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(objects.msg_restore_panel, this->ui_event_MsgRestoreButton, LV_EVENT_CLICKED, NULL);
@@ -1250,6 +1349,7 @@ void TFTView_320x240::ui_event_NodeButton(lv_event_t *e)
             lv_anim_set_path_cb(&a, lv_anim_path_linear);
             lv_anim_set_deleted_cb(&a, deleted_cb);
             lv_anim_start(&a);
+            lv_obj_scroll_to_view(panel, LV_ANIM_ON);
             currentPanel = panel;
             currentNode = nodeNum;
         } else {
@@ -1266,6 +1366,23 @@ void TFTView_320x240::ui_event_NodeButton(lv_event_t *e)
         } else if (THIS->chooseNodeTraceRoute) {
             THIS->chooseNodeTraceRoute = false;
             ui_event_trace_route(NULL);
+        }
+    } else if (event_code == LV_EVENT_KEY) {
+        uint32_t key = lv_event_get_key(e);
+        // Page-jump: skip 5 nodes forward/backward for fast navigation with encoder
+        if (key == LV_KEY_NEXT || key == LV_KEY_PREV) {
+            lv_group_t *g = lv_group_get_default();
+            if (g) {
+                for (int i = 0; i < 5; i++) {
+                    if (key == LV_KEY_NEXT)
+                        lv_group_focus_next(g);
+                    else
+                        lv_group_focus_prev(g);
+                }
+                lv_obj_t *focused = lv_group_get_focused(g);
+                if (focused)
+                    lv_obj_scroll_to_view(focused, LV_ANIM_ON);
+            }
         }
     } else if (event_code == LV_EVENT_LONG_PRESSED) {
         //  set color and text of clicked node
@@ -1322,6 +1439,52 @@ void TFTView_320x240::ui_event_MessagesButton(lv_event_t *e)
         } else {
             lv_obj_clear_flag(objects.msg_restore_panel, LV_OBJ_FLAG_HIDDEN);
             lv_group_focus_obj(objects.msg_restore_button);
+        }
+    }
+}
+
+// Global key handler for navigation - catches LV_KEY_HOME to focus side menu
+void TFTView_320x240::ui_event_GlobalKeyHandler(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code == LV_EVENT_KEY) {
+        uint32_t key = lv_event_get_key(e);
+
+        if (key == LV_KEY_HOME) {
+            // Focus the home button to enable side menu navigation
+            if (objects.home_button) {
+                lv_group_focus_obj(objects.home_button);
+            }
+        } else if (key == LV_KEY_NEXT || key == LV_KEY_PREV) {
+            // Screen tab switching: cycle through main screens
+            lv_obj_t *tabs[] = {
+                objects.home_button, objects.nodes_button, objects.groups_button,
+                objects.messages_button, objects.map_button, objects.settings_button
+            };
+            const int numTabs = 6;
+
+            // Only switch tabs when we're at the main button level (not inside a sub-panel)
+            if (THIS->activeSettings != eNone)
+                return;
+
+            // Find current active tab
+            int currentIdx = -1;
+            for (int i = 0; i < numTabs; i++) {
+                if (tabs[i] == THIS->activeButton) {
+                    currentIdx = i;
+                    break;
+                }
+            }
+
+            if (currentIdx >= 0) {
+                int nextIdx;
+                if (key == LV_KEY_NEXT)
+                    nextIdx = (currentIdx + 1) % numTabs;
+                else
+                    nextIdx = (currentIdx - 1 + numTabs) % numTabs;
+
+                lv_event_send(tabs[nextIdx], LV_EVENT_CLICKED, NULL);
+            }
         }
     }
 }
@@ -1464,7 +1627,32 @@ void TFTView_320x240::ui_event_ChatDelButton(lv_event_t *e)
  */
 void TFTView_320x240::ui_event_MsgPopupButton(lv_event_t *e)
 {
+    lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *target = lv_event_get_target_obj(e);
+
+    // Handle keyboard events - any key dismisses popup, ENTER navigates to chat
+    if (code == LV_EVENT_KEY) {
+        uint32_t key = lv_event_get_key(e);
+        if (key == LV_KEY_ENTER) {
+            // Navigate to the chat (same as clicking button)
+            THIS->hideMessagePopup();
+            uint32_t channelOrNode = (unsigned long)objects.msg_popup_button->user_data;
+            if (channelOrNode < c_max_channels) {
+                uint8_t ch = (uint8_t)channelOrNode;
+                THIS->showMessages(ch);
+            } else {
+                uint32_t nodeNum = channelOrNode;
+                THIS->showMessages(nodeNum);
+            }
+        } else {
+            // Any other key dismisses the popup (space, backspace, ESC, q, etc.)
+            THIS->hideMessagePopup();
+            THIS->setGroupFocus(THIS->activePanel);
+        }
+        return;
+    }
+
+    // Handle click events
     if (target == objects.msg_popup_panel) {
         THIS->hideMessagePopup();
     } else { // msg button was clicked
@@ -1915,6 +2103,7 @@ void TFTView_320x240::ui_event_user_button(lv_event_t *e)
         lv_textarea_set_text(objects.settings_user_long_textarea, THIS->db.long_name);
         lv_obj_clear_flag(objects.settings_username_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_user_short_textarea);
+        lv_obj_scroll_to_view(objects.settings_user_short_textarea, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eUsername;
@@ -1928,6 +2117,7 @@ void TFTView_320x240::ui_event_role_button(lv_event_t *e)
         lv_dropdown_set_selected(objects.settings_device_role_dropdown, THIS->role2val(THIS->db.config.device.role));
         lv_obj_clear_flag(objects.settings_device_role_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_device_role_dropdown);
+        lv_obj_scroll_to_view(objects.settings_device_role_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eDeviceRole;
@@ -1941,6 +2131,7 @@ void TFTView_320x240::ui_event_region_button(lv_event_t *e)
         lv_dropdown_set_selected(objects.settings_region_dropdown, THIS->db.config.lora.region - 1);
         lv_obj_clear_flag(objects.settings_region_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_region_dropdown);
+        lv_obj_scroll_to_view(objects.settings_region_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eRegion;
@@ -1966,6 +2157,7 @@ void TFTView_320x240::ui_event_preset_button(lv_event_t *e)
 
         lv_obj_clear_flag(objects.settings_modem_preset_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_modem_preset_dropdown);
+        lv_obj_scroll_to_view(objects.settings_modem_preset_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
     }
 }
@@ -1978,6 +2170,7 @@ void TFTView_320x240::ui_event_wifi_button(lv_event_t *e)
         lv_textarea_set_text(objects.settings_wifi_password_textarea, THIS->db.config.network.wifi_psk);
         lv_obj_clear_flag(objects.settings_wifi_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_wifi_ssid_textarea);
+        lv_obj_scroll_to_view(objects.settings_wifi_ssid_textarea, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eWifi;
@@ -1991,6 +2184,7 @@ void TFTView_320x240::ui_event_language_button(lv_event_t *e)
         lv_dropdown_set_selected(objects.settings_language_dropdown, THIS->language2val(THIS->db.uiConfig.language));
         lv_obj_clear_flag(objects.settings_language_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_language_dropdown);
+        lv_obj_scroll_to_view(objects.settings_language_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eLanguage;
@@ -2025,6 +2219,7 @@ void TFTView_320x240::ui_event_channel_button(lv_event_t *e)
         }
         lv_obj_clear_flag(objects.settings_channel_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_channel0_button);
+        lv_obj_scroll_to_view(objects.settings_channel0_button, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eChannel;
@@ -2048,6 +2243,7 @@ void TFTView_320x240::ui_event_brightness_button(lv_event_t *e)
         lv_slider_set_value(objects.brightness_slider, brightness, LV_ANIM_OFF);
         lv_obj_clear_flag(objects.settings_brightness_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.brightness_slider);
+        lv_obj_scroll_to_view(objects.brightness_slider, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eScreenBrightness;
@@ -2061,6 +2257,7 @@ void TFTView_320x240::ui_event_theme_button(lv_event_t *e)
         lv_dropdown_set_selected(objects.settings_theme_dropdown, THIS->db.uiConfig.theme);
         lv_obj_clear_flag(objects.settings_theme_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_theme_dropdown);
+        lv_obj_scroll_to_view(objects.settings_theme_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eTheme;
@@ -2089,6 +2286,7 @@ void TFTView_320x240::ui_event_timeout_button(lv_event_t *e)
         lv_obj_clear_flag(objects.settings_screen_timeout_panel, LV_OBJ_FLAG_HIDDEN);
         lv_slider_set_value(objects.screen_timeout_slider, timeout, LV_ANIM_OFF);
         lv_group_focus_obj(objects.screen_timeout_slider);
+        lv_obj_scroll_to_view(objects.screen_timeout_slider, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eScreenTimeout;
@@ -2115,6 +2313,7 @@ void TFTView_320x240::ui_event_screen_lock_button(lv_event_t *e)
 
         lv_obj_clear_flag(objects.settings_screen_lock_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_screen_lock_switch);
+        lv_obj_scroll_to_view(objects.settings_screen_lock_switch, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eScreenLock;
@@ -2150,6 +2349,7 @@ void TFTView_320x240::ui_event_input_button(lv_event_t *e)
 
         lv_obj_clear_flag(objects.settings_input_control_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_mouse_input_dropdown);
+        lv_obj_scroll_to_view(objects.settings_mouse_input_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eInputControl;
@@ -2177,6 +2377,7 @@ void TFTView_320x240::ui_event_alert_button(lv_event_t *e)
         lv_dropdown_set_selected(objects.settings_ringtone_dropdown, THIS->db.uiConfig.ring_tone_id - 1);
         lv_obj_clear_flag(objects.settings_alert_buzzer_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_alert_buzzer_switch);
+        lv_obj_scroll_to_view(objects.settings_alert_buzzer_switch, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eAlertBuzzer;
@@ -2190,6 +2391,7 @@ void TFTView_320x240::ui_event_backup_button(lv_event_t *e)
     if (event_code == LV_EVENT_CLICKED && THIS->activeSettings == eNone) {
         lv_obj_clear_flag(objects.settings_backup_restore_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_backup_restore_dropdown);
+        lv_obj_scroll_to_view(objects.settings_backup_restore_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eBackupRestore;
@@ -2203,6 +2405,7 @@ void TFTView_320x240::ui_event_reset_button(lv_event_t *e)
     if (event_code == LV_EVENT_CLICKED && THIS->activeSettings == eNone) {
         lv_obj_clear_flag(objects.settings_reset_panel, LV_OBJ_FLAG_HIDDEN);
         lv_group_focus_obj(objects.settings_reset_dropdown);
+        lv_obj_scroll_to_view(objects.settings_reset_dropdown, LV_ANIM_ON);
         THIS->disablePanel(objects.controller_panel);
         THIS->disablePanel(objects.tab_page_basic_settings);
         THIS->activeSettings = eReset;
@@ -4835,6 +5038,10 @@ void TFTView_320x240::addNode(uint32_t nodeNum, uint8_t ch, const char *userShor
     add_style_node_button_style(nodeButton);
     lv_obj_set_align(nodeButton, LV_ALIGN_CENTER);
     lv_obj_add_flag(nodeButton, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    // Focus highlight for encoder navigation
+    lv_obj_set_style_border_color(nodeButton, lv_color_hex(0x67EA94), LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(nodeButton, 2, LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_opa(nodeButton, 255, LV_PART_MAIN | LV_STATE_FOCUSED);
     lv_obj_set_style_shadow_width(nodeButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_max_height(nodeButton, 132, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_min_height(nodeButton, 50, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -6059,10 +6266,18 @@ void TFTView_320x240::screenSaving(bool enabled)
     if (enabled) {
         // overlay main screen with blank screen to prevent accidentally pressing buttons
         lv_screen_load_anim(objects.blank_screen, LV_SCR_LOAD_ANIM_FADE_OUT, 0, 0, false);
+        lv_group_t *group = lv_group_get_default();
+        if (group) {
+            lv_group_add_obj(group, objects.blank_screen_button);
+        }
         lv_group_focus_obj(objects.blank_screen_button);
         screenLocked = true;
         screenUnlockRequest = false;
     } else {
+        lv_group_t *group = lv_group_get_default();
+        if (group) {
+            lv_group_remove_obj(objects.blank_screen_button);
+        }
         if (THIS->db.uiConfig.screen_lock) {
             ILOG_DEBUG("showing lock screen");
             lv_screen_load_anim(objects.lock_screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
@@ -7096,6 +7311,9 @@ void TFTView_320x240::addChat(uint32_t from, uint32_t to, uint8_t ch)
     lv_obj_set_pos(chatBtn, 0, 0);
     lv_obj_set_size(chatBtn, LV_PCT(100), buttonSize);
     lv_obj_add_flag(chatBtn, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    // Focus highlight for encoder navigation
+    lv_obj_set_style_border_color(chatBtn, lv_color_hex(0x67EA94), LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(chatBtn, 2, LV_PART_MAIN | LV_STATE_FOCUSED);
     lv_obj_clear_flag(chatBtn, LV_OBJ_FLAG_SCROLLABLE);
     add_style_home_button_style(chatBtn);
     lv_obj_set_style_align(chatBtn, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -7459,11 +7677,16 @@ void TFTView_320x240::setGroupFocus(lv_obj_t *panel)
     } else if (panel == objects.messages_panel) {
         lv_group_focus_obj(objects.message_input_area);
     } else if (panel == objects.chats_panel) {
-        if (chats.size() > 0) {
-            lv_group_focus_obj(panel->spec_attr->children[1]); // TODO: does not work
+        for (int i = 0; i < lv_obj_get_child_count(panel); i++) {
+            lv_obj_t *child = lv_obj_get_child(panel, i);
+            if (child->class_p == &lv_button_class) {
+                lv_group_focus_obj(child);
+                break;
+            }
         }
     } else if (panel == objects.map_panel) {
-
+        if (objects.nav_button)
+            lv_group_focus_obj(objects.nav_button);
     } else if (panel == objects.settings_screen_lock_panel) {
         lv_group_focus_obj(objects.screen_lock_button_matrix);
     } else if (panel == objects.controller_panel) {

@@ -5,7 +5,7 @@
 .vscode/ipch
 studio
 build
-build-linux
+build-*
 .DS_Store
 _codeql_detected_source_root
-build-*
+.omc

@@ -1,4 +1,4 @@
-#if defined(VIEW_320x240) || defined(VIEW_240x320)
+#if defined(VIEW_320x240) || defined(VIEW_240x320) || defined(VIEW_480x222)
 
 #include "graphics/view/TFT/Themes.h"
 #include "stdint.h"
@@ -415,11 +415,58 @@ void Themes::set(enum Theme th)
     apply_style_statistics_table_style_ITEMS_DEFAULT();
 }
 
+// Focus highlight color (colorMesh accent)
+#define COLOR_FOCUS_BORDER 0x67EA94
+
+static lv_style_t style_focused_btn;
+static lv_style_t style_focused_dropdown;
+static lv_style_t style_focused_slider_knob;
+static lv_style_t style_focused_textarea;
+static lv_style_t style_focused_switch;
+
+static void init_focus_styles(void)
+{
+    // Button focused: green border
+    lv_style_init(&style_focused_btn);
+    lv_style_set_border_color(&style_focused_btn, lv_color_hex(COLOR_FOCUS_BORDER));
+    lv_style_set_border_width(&style_focused_btn, 2);
+    lv_style_set_border_opa(&style_focused_btn, 255);
+
+    // Dropdown focused: green outline
+    lv_style_init(&style_focused_dropdown);
+    lv_style_set_outline_color(&style_focused_dropdown, lv_color_hex(COLOR_FOCUS_BORDER));
+    lv_style_set_outline_width(&style_focused_dropdown, 2);
+    lv_style_set_outline_opa(&style_focused_dropdown, 255);
+
+    // Slider knob focused: green outline
+    lv_style_init(&style_focused_slider_knob);
+    lv_style_set_outline_color(&style_focused_slider_knob, lv_color_hex(COLOR_FOCUS_BORDER));
+    lv_style_set_outline_width(&style_focused_slider_knob, 3);
+
+    // Textarea focused: green border
+    lv_style_init(&style_focused_textarea);
+    lv_style_set_border_color(&style_focused_textarea, lv_color_hex(COLOR_FOCUS_BORDER));
+    lv_style_set_border_width(&style_focused_textarea, 2);
+
+    // Switch focused: green outline
+    lv_style_init(&style_focused_switch);
+    lv_style_set_outline_color(&style_focused_switch, lv_color_hex(COLOR_FOCUS_BORDER));
+    lv_style_set_outline_width(&style_focused_switch, 2);
+}
+
+lv_style_t *Themes::getFocusStyleBtn(void) { return &style_focused_btn; }
+lv_style_t *Themes::getFocusStyleDropdown(void) { return &style_focused_dropdown; }
+lv_style_t *Themes::getFocusStyleSliderKnob(void) { return &style_focused_slider_knob; }
+lv_style_t *Themes::getFocusStyleTextarea(void) { return &style_focused_textarea; }
+lv_style_t *Themes::getFocusStyleSwitch(void) { return &style_focused_switch; }
+
 void Themes::initStyles(void)
 {
     // set(get());
     //  lvgl v9 tabview buttons are not btn-matrix anymore but array of buttons
     //  see https://forum.lvgl.io/t/style-a-tabview-widget-in-v9-0-0/14747
+    init_focus_styles();
+
     lv_style_init(&style_btn_default);
     lv_style_set_text_color(&style_btn_default, lv_color_hex(THEME(eTabButtonDefaultText)));
     lv_style_set_bg_color(&style_btn_default, lv_color_hex(THEME(eTabButtonDefaultBg)));

@@ -18,8 +18,27 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #define URLSERVICE_HTTP_ENABLED 1
+#include "FS.h"
+#ifdef ARCH_PORTDUINO
+#include "PortduinoFS.h"
+static fs::FS &CacheFS = PortduinoFS;
+#elif defined(HAS_SD_MMC)
+#include "SD_MMC.h"
+static auto &CacheFS = SD_MMC;
+#elif __has_include(<SD.h>)
+#include "SD.h"
+static auto &CacheFS = SD;
+#define HAS_SD_CACHE 1
+#endif
 #else
 #define URLSERVICE_HTTP_ENABLED 0
+#endif
+
+#if __has_include(<esp_task_wdt.h>)
+#include <esp_task_wdt.h>
+#define URLSERVICE_HAS_WDT 1
+#else
+#define URLSERVICE_HAS_WDT 0
 #endif
 
 namespace {
@@ -58,13 +77,56 @@ struct TilePreFetchCache {
 };
 static TilePreFetchCache tilePreFetchCache;
 
-static const char *const TILE_HOSTS[] = {"https://a.tile.openstreetmap.org", "https://b.tile.openstreetmap.org",
-                                         "https://c.tile.openstreetmap.org"};
+static const char *const TILE_HOSTS[] = {"http://a.tile.openstreetmap.org", "http://b.tile.openstreetmap.org",
+                                         "http://c.tile.openstreetmap.org"};
 static constexpr size_t TILE_HOSTS_COUNT = sizeof(TILE_HOSTS) / sizeof(TILE_HOSTS[0]);
-static constexpr size_t MAX_TILE_SIZE_BYTES = 512 * 1024;
+static constexpr size_t MAX_TILE_SIZE_BYTES = 64 * 1024;
 static constexpr const char *TILE_USER_AGENT = "Meshtastic-DeviceUI/1.0 (+https://meshtastic.org/)";
 static constexpr const char *YANDEX_TILE_URL = "https://tiles.api-maps.yandex.ru/v1/tiles/";
 static constexpr const char *YANDEX_TILE_API_KEY = "45735e54-8e67-4809-95b6-6cf1e13a4b6b";
+
+#if defined(HAS_SD_CACHE) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+#define SD_CACHE_ENABLED 1
+static bool sdCacheChecked = false;
+static bool sdCacheAvail = false;
+
+bool checkSdCache() {
+    if (sdCacheChecked) return sdCacheAvail;
+    sdCacheChecked = true;
+    File root = CacheFS.open("/");
+    if (!root) { sdCacheAvail = false; return false; }
+    root.close();
+    sdCacheAvail = true;
+    CacheFS.mkdir("/tiles");
+    return true;
+}
+
+bool loadFromSdCache(uint32_t z, uint32_t x, uint32_t y, std::vector<uint8_t> &bytes) {
+    if (!checkSdCache()) return false;
+    char path[64];
+    snprintf(path, sizeof(path), "/tiles/%u/%u/%u.png", z, x, y);
+    File f = CacheFS.open(path, FILE_READ);
+    if (!f) return false;
+    size_t sz = f.size();
+    if (sz == 0 || sz > MAX_TILE_SIZE_BYTES) { f.close(); return false; }
+    bytes.resize(sz);
+    size_t rd = f.read(bytes.data(), sz);
+    f.close();
+    return rd == sz;
+}
+
+void saveToSdCache(uint32_t z, uint32_t x, uint32_t y, const std::vector<uint8_t> &bytes) {
+    if (!checkSdCache() || bytes.empty()) return;
+    char dir1[32], dir2[48], path[64];
+    snprintf(dir1, sizeof(dir1), "/tiles/%u", z);
+    snprintf(dir2, sizeof(dir2), "/tiles/%u/%u", z, x);
+    snprintf(path, sizeof(path), "/tiles/%u/%u/%u.png", z, x, y);
+    CacheFS.mkdir(dir1);
+    CacheFS.mkdir(dir2);
+    File f = CacheFS.open(path, FILE_WRITE);
+    if (f) { f.write(bytes.data(), bytes.size()); f.close(); }
+}
+#endif
 
 bool parseUInt(const char *start, const char *end, uint32_t &value)
 {
@@ -160,19 +222,42 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
         return false;
     }
 
-    WiFiClientSecure client;
-    // Certificate verification is intentionally skipped: embedded targets lack
-    // a CA bundle, and OSM tile servers rotate certificates frequently.
-    // Tile data itself is public, so integrity risk is acceptable here.
-    client.setInsecure();
+    // Try SD cache first
+#if defined(SD_CACHE_ENABLED)
+    if (loadFromSdCache(z, x, y, bytes)) {
+        ILOG_DEBUG("URLService: tile from SD cache: %u/%u/%u", z, x, y);
+        return true;
+    }
+#endif
+
+    // Temporarily remove this task from the watchdog monitor: the SSL handshake
+    // alone can take 6+ seconds, which exceeds the default WDT timeout (5s).
+    // Use a RAII-style lambda to guarantee re-registration on every exit path.
+#if URLSERVICE_HAS_WDT
+    esp_task_wdt_delete(NULL);
+    struct WdtGuard {
+        ~WdtGuard() { esp_task_wdt_add(NULL); }
+    } wdtGuard;
+#endif
+
+    static WiFiClient httpClient;
+    static WiFiClientSecure httpsClient;
+    static bool httpsClientInit = false;
+
+    bool isHttps = (strncmp(url, "https", 5) == 0);
+    if (isHttps && !httpsClientInit) {
+        httpsClient.setInsecure();
+        httpsClientInit = true;
+    }
+    WiFiClient &activeClient = isHttps ? static_cast<WiFiClient&>(httpsClient) : httpClient;
 
     HTTPClient http;
-    http.setConnectTimeout(4000);
-    http.setTimeout(7000);
-    http.setReuse(false);
+    http.setConnectTimeout(3000);
+    http.setTimeout(5000);
+    http.setReuse(true);
     http.setUserAgent(TILE_USER_AGENT);
 
-    if (!http.begin(client, url)) {
+    if (!http.begin(activeClient, url)) {
         ILOG_DEBUG("URLService begin failed: %s", url);
         return false;
     }
@@ -202,13 +287,13 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
         bytes.reserve(static_cast<size_t>(remaining));
     }
 
-    uint8_t buffer[1024];
+    uint8_t buffer[2048];
     uint32_t idleLoops = 0;
     while ((http.connected() || stream->available() > 0) && (remaining > 0 || remaining == -1)) {
         const int avail = stream->available();
         if (avail <= 0) {
-            delay(1);
-            if (++idleLoops > 5000U) {
+            yield();
+            if (++idleLoops > 2000U) {
                 break;
             }
             continue;
@@ -229,9 +314,7 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
             return false;
         }
 
-        const size_t oldSize = bytes.size();
-        bytes.resize(oldSize + readLen);
-        std::memcpy(bytes.data() + oldSize, buffer, readLen);
+        bytes.insert(bytes.end(), buffer, buffer + readLen);
 
         if (remaining > 0) {
             remaining = std::max<int32_t>(0, remaining - static_cast<int32_t>(readLen));
@@ -243,6 +326,10 @@ bool fetchTile(const char *path, std::vector<uint8_t> &bytes)
         ILOG_DEBUG("URLService empty response: %s", url);
         return false;
     }
+
+#if defined(SD_CACHE_ENABLED)
+    saveToSdCache(z, x, y, bytes);
+#endif
 
     return true;
 }
