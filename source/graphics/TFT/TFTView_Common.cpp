@@ -1317,8 +1317,11 @@ void TFTView_Common::purgeNode(uint32_t nodeNum)
     lv_obj_t *p = children[i];
     uint32_t oldest = (unsigned long)(p->LV_OBJ_IDX(node_lbl_idx)->user_data);
     uint32_t lastHeard = (unsigned long)p->LV_OBJ_IDX(node_lh_idx)->user_data;
-    if (lastHeard > 0 && (THIS->curtime - lastHeard <= THIS->secs_until_offline))
-        THIS->nodesOnline--;
+    if (lastHeard > 0) {
+        char buf[20];
+        if (THIS->lastHeardToString(lastHeard, buf))
+            THIS->nodesOnline--;
+    }
 
     ILOG_INFO("removing oldest node 0x%08x", oldest);
     lv_obj_delete(p);
@@ -1585,7 +1588,8 @@ void TFTView_Common::updateLastHeard(uint32_t nodeNum)
         it->second->LV_OBJ_IDX(node_lh_idx)->user_data = (void *)THIS->curtime;
         lv_label_set_text(it->second->LV_OBJ_IDX(node_lh_idx), _("now"));
         if (it->first != THIS->ownNode) {
-            if (lastHeard > 0 && THIS->curtime - lastHeard >= THIS->secs_until_offline) {
+            char buf[20];
+            if (lastHeard > 0 && !THIS->lastHeardToString(lastHeard, buf)) {
                 THIS->nodesOnline++;
                 applyNodesFilter(nodeNum);
                 updateNodesStatus();
