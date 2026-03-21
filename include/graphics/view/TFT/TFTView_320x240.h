@@ -227,6 +227,8 @@ class TFTView_320x240 : public MeshtasticView
 
     void backup(uint32_t option);
     void restore(uint32_t option);
+    bool backupFullConfig(void);
+    bool restoreFullConfig(void);
 
     void scanSignal(uint32_t scanNo);
     void handleTraceRouteResponse(const meshtastic_Routing &routing);
@@ -278,6 +280,7 @@ class TFTView_320x240 : public MeshtasticView
     static void ui_event_NodesButton(lv_event_t *e);
     static void ui_event_GroupsButton(lv_event_t *e);
     static void ui_event_MessagesButton(lv_event_t *e);
+    static void ui_event_GlobalKeyHandler(lv_event_t *e);
     static void ui_event_MapButton(lv_event_t *e);
     static void ui_event_SettingsButton(lv_event_t *e);
 

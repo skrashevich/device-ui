@@ -9,6 +9,7 @@
 #include "graphics/driver/DisplayDriver.h"
 #include "graphics/driver/DisplayDriverFactory.h"
 #include "graphics/map/MapPanel.h"
+#include "graphics/map/MapTileSettings.h"
 #include "graphics/view/TFT/Themes.h"
 #include "images.h"
 #include "input/I2CKeyboardInputDriver.h"
@@ -48,6 +49,7 @@ fs::FS &fileSystem = LittleFS;
 #else
 #include "graphics/map/SdFatService.h"
 #endif
+#include "graphics/map/URLService.h"
 #include "graphics/common/SdCard.h"
 
 #ifndef MAX_NUM_NODES_VIEW
@@ -83,6 +85,51 @@ constexpr lv_color_t colorLightGray = LV_COLOR_HEX(0xAAFBFF);
 constexpr lv_color_t colorMidGray = LV_COLOR_HEX(0x808080);
 constexpr lv_color_t colorDarkGray = LV_COLOR_HEX(0x303030);
 constexpr lv_color_t colorMesh = LV_COLOR_HEX(0x67ea94);
+
+constexpr const char *MAP_PROVIDER_PREF_PATH = "/map-provider.cfg";
+constexpr const char *MAP_PROVIDER_OSM = "osm";
+constexpr const char *MAP_PROVIDER_YANDEX = "yandex";
+
+static const char *mapProviderToString(MapTileProvider provider)
+{
+    return provider == MapTileProvider::Yandex ? MAP_PROVIDER_YANDEX : MAP_PROVIDER_OSM;
+}
+
+static MapTileProvider parseMapProvider(const char *provider)
+{
+    if (provider && std::strcmp(provider, MAP_PROVIDER_YANDEX) == 0) {
+        return MapTileProvider::Yandex;
+    }
+    return MapTileProvider::OSM;
+}
+
+// TODO: Move map provider persistence helpers to a shared location (e.g. MeshtasticView base class
+// or a dedicated MapProviderSettings utility) to avoid duplication between TFTView_320x240 and TFTView_480x222.
+static MapTileProvider loadPersistedMapProvider(void)
+{
+    File file = fileSystem.open(MAP_PROVIDER_PREF_PATH, FILE_READ);
+    if (!file) {
+        return MapTileProvider::OSM;
+    }
+
+    char value[16] = {};
+    size_t read = file.readBytesUntil('\n', value, sizeof(value) - 1);
+    value[read] = '\0';
+    file.close();
+
+    return parseMapProvider(value);
+}
+
+static void persistMapProvider(MapTileProvider provider)
+{
+    File file = fileSystem.open(MAP_PROVIDER_PREF_PATH, FILE_WRITE);
+    if (!file) {
+        ILOG_WARN("failed to persist map provider preference");
+        return;
+    }
+    file.print(mapProviderToString(provider));
+    file.close();
+}
 
 #define KEYBOARD_CTRL_BUTTON_FLAGS                                                                                               \
     (LV_BUTTONMATRIX_CTRL_NO_REPEAT | LV_BUTTONMATRIX_CTRL_CLICK_TRIG | LV_BUTTONMATRIX_CTRL_CHECKED)
@@ -344,6 +391,8 @@ bool TFTView_480x222::setupUIConfig(const meshtastic_DeviceUIConfig &uiconfig)
         controller->storeUIConfig(db.uiConfig);
     }
 
+    MapTileSettings::setTileProvider(loadPersistedMapProvider());
+
     lv_i18n_init(lv_i18n_language_pack);
     setLocale(db.uiConfig.language);
 
@@ -530,6 +579,7 @@ void TFTView_480x222::init_screens(void)
 
 #ifdef HAS_SDCARD
     lv_obj_clear_flag(objects.basic_settings_backup_restore_button, LV_OBJ_FLAG_HIDDEN);
+    lv_dropdown_set_options(objects.settings_backup_restore_dropdown, _("Public/Private Key\nFull Config"));
 #endif
 
     if (controller->isStandalone()) {
@@ -844,8 +894,14 @@ void TFTView_480x222::apply_hotfix(void)
     lv_obj_add_flag(objects.settings_language_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.settings_theme_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.settings_mouse_input_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_keyboard_input_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.settings_ringtone_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.settings_reset_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.settings_backup_restore_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.nodes_filter_hops_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.nodes_filter_channel_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(objects.setup_region_dropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.brightness_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.screen_timeout_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_flag(objects.frequency_slot_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
@@ -876,8 +932,14 @@ void TFTView_480x222::apply_hotfix(void)
     lv_obj_add_style(objects.settings_language_dropdown, focusDd, LV_STATE_FOCUSED);
     lv_obj_add_style(objects.settings_theme_dropdown, focusDd, LV_STATE_FOCUSED);
     lv_obj_add_style(objects.settings_mouse_input_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_keyboard_input_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.settings_ringtone_dropdown, focusDd, LV_STATE_FOCUSED);
     lv_obj_add_style(objects.settings_reset_dropdown, focusDd, LV_STATE_FOCUSED);
     lv_obj_add_style(objects.settings_backup_restore_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.nodes_filter_hops_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.nodes_filter_channel_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.map_style_dropdown, focusDd, LV_STATE_FOCUSED);
+    lv_obj_add_style(objects.setup_region_dropdown, focusDd, LV_STATE_FOCUSED);
 
     // Settings sliders
     lv_obj_add_style(objects.brightness_slider, focusSlider, LV_PART_KNOB | LV_STATE_FOCUSED);
@@ -1011,12 +1073,22 @@ void TFTView_480x222::ui_events_init(void)
         }
     });
 
-    // Register callback for alt+encoder scrolling in messages
+    // Register callback for alt+encoder scrolling in active panel
     I2CKeyboardInputDriver::setScrollCallback([](int direction) {
-        if (THIS && THIS->activeMsgContainer && THIS->activePanel == objects.messages_panel) {
-            int32_t scroll_amount = 80;
-            // direction > 0 means scroll down (content moves up), < 0 means scroll up
-            lv_obj_scroll_by(THIS->activeMsgContainer, 0, direction > 0 ? -scroll_amount : scroll_amount, LV_ANIM_ON);
+        if (!THIS) return;
+        int32_t scroll_amount = 80;
+        // direction > 0 means scroll down (content moves up), < 0 means scroll up
+        int32_t dy = direction > 0 ? -scroll_amount : scroll_amount;
+        lv_obj_t *panel = THIS->activePanel;
+        if (panel == objects.messages_panel) {
+            if (THIS->activeMsgContainer)
+                lv_obj_scroll_by(THIS->activeMsgContainer, 0, dy, LV_ANIM_ON);
+        } else if (panel == objects.nodes_panel) {
+            lv_obj_scroll_by(objects.nodes_panel, 0, dy, LV_ANIM_ON);
+        } else if (panel == objects.groups_panel) {
+            lv_obj_scroll_by(objects.groups_panel, 0, dy, LV_ANIM_ON);
+        } else if (panel == objects.controller_panel) {
+            lv_obj_scroll_by(objects.controller_panel, 0, dy, LV_ANIM_ON);
         }
     });
 
@@ -1340,6 +1412,34 @@ void TFTView_480x222::ui_event_GlobalKeyHandler(lv_event_t *e)
     if (event_code == LV_EVENT_KEY) {
         uint32_t key = lv_event_get_key(e);
 
+        // Map panel keyboard navigation: arrow keys pan, Enter/Esc zoom
+        if (THIS->activePanel == objects.map_panel && THIS->map && THIS->map->redrawComplete()) {
+            uint16_t deltaX = 0;
+            uint16_t deltaY = 0;
+            bool handled = true;
+            switch (key) {
+            case LV_KEY_UP:    deltaX = 0;  deltaY = 1;  break;
+            case LV_KEY_DOWN:  deltaX = 0;  deltaY = -1; break;
+            case LV_KEY_LEFT:  deltaX = 1;  deltaY = 0;  break;
+            case LV_KEY_RIGHT: deltaX = -1; deltaY = 0;  break;
+            case LV_KEY_ENTER:
+                THIS->map->setZoom(MapTileSettings::getZoomLevel() + 1);
+                THIS->updateLocationMap(THIS->map->getObjectsOnMap());
+                return;
+            case LV_KEY_ESC:
+                THIS->map->setZoom(MapTileSettings::getZoomLevel() - 1);
+                THIS->updateLocationMap(THIS->map->getObjectsOnMap());
+                return;
+            default: handled = false; break;
+            }
+            if (handled) {
+                if (!THIS->map->scroll(deltaX, deltaY))
+                    THIS->map->forceRedraw();
+                THIS->updateLocationMap(THIS->map->getObjectsOnMap());
+                return;
+            }
+        }
+
         if (key == LV_KEY_HOME) {
             // Focus the home button to enable side menu navigation
             if (objects.home_button) {
@@ -1579,6 +1679,10 @@ void TFTView_480x222::ui_event_MapButton(lv_event_t *e)
         }
         lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
     } else if (event_code == LV_EVENT_LONG_PRESSED && THIS->activeSettings == eNone) {
+        if (THIS->activePanel != objects.map_panel) {
+            THIS->ui_set_active(objects.map_button, objects.map_panel, objects.top_map_panel);
+        }
+        THIS->loadMap();
         lv_obj_clear_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
         ignoreClicked = true;
     }
@@ -2987,8 +3091,53 @@ void TFTView_480x222::ui_event_navHome(lv_event_t *e)
     }
 }
 
+void TFTView_480x222::ensureMapProviderDropdown(void)
+{
+    if (!mapProviderDropdown) {
+        mapProviderDropdown = lv_dropdown_create(objects.map_osd_panel);
+        lv_obj_set_pos(mapProviderDropdown, 0, 100);
+        lv_obj_set_size(mapProviderDropdown, LV_PCT(85), LV_SIZE_CONTENT);
+        lv_dropdown_set_options(mapProviderDropdown, "OSM\nYandex");
+        add_style_drop_down_style(mapProviderDropdown);
+        lv_obj_set_style_align(mapProviderDropdown, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_left(mapProviderDropdown, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_row(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_column(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_event_cb(mapProviderDropdown, ui_event_map_provider_dropdown, LV_EVENT_VALUE_CHANGED, nullptr);
+        lv_obj_add_flag(mapProviderDropdown, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+        lv_obj_add_style(mapProviderDropdown, Themes::getFocusStyleDropdown(), LV_STATE_FOCUSED);
+        lv_group_t *group = lv_group_get_default();
+        if (group)
+            lv_group_add_obj(group, mapProviderDropdown);
+    }
+
+    lv_dropdown_set_selected(mapProviderDropdown,
+                             MapTileSettings::getTileProvider() == MapTileProvider::Yandex ? 1 : 0);
+}
+
+void TFTView_480x222::ui_event_map_provider_dropdown(lv_event_t *e)
+{
+    if (!THIS->mapProviderDropdown) {
+        return;
+    }
+
+    const uint16_t provider = lv_dropdown_get_selected(THIS->mapProviderDropdown);
+    const MapTileProvider tileProvider = provider == 1 ? MapTileProvider::Yandex : MapTileProvider::OSM;
+    MapTileSettings::setTileProvider(tileProvider);
+    persistMapProvider(tileProvider);
+    lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
+    if (THIS->map) {
+        THIS->map->setZoom(MapTileSettings::getZoomLevel());
+        THIS->map->forceRedraw();
+    }
+}
+
 void TFTView_480x222::loadMap(void)
 {
+    ensureMapProviderDropdown();
+
     if (!map) {
 #if LV_USE_FS_ARDUINO_SD
         map = new MapPanel(objects.raw_map_panel);
@@ -3001,6 +3150,7 @@ void TFTView_480x222::loadMap(void)
 #else
         map = new MapPanel(objects.raw_map_panel);
 #endif
+        map->setBackupService(new URLService());
         map->setHomeLocationImage(objects.home_location_image);
         lv_obj_add_flag(objects.home_location_image, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(objects.home_location_image, ui_event_mapNodeButton, LV_EVENT_CLICKED, (void *)ownNode);
@@ -3089,6 +3239,8 @@ void TFTView_480x222::loadMap(void)
     if (sdCard) {
         if (!sdCard->isUpdated()) {
             map->setNoTileImage(&img_no_tile_image);
+            const bool hasOnlineTiles = db.connectionStatus.has_wifi && db.connectionStatus.wifi.has_status &&
+                                        db.connectionStatus.wifi.status.is_connected;
             std::set<std::string> mapStyles = sdCard->loadMapStyles(MapTileSettings::getPrefix());
             if (mapStyles.find("/map") != mapStyles.end()) {
                 // no styles found, but the /map directory, so use it
@@ -3097,6 +3249,7 @@ void TFTView_480x222::loadMap(void)
                 lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
             } else if (!mapStyles.empty()) {
                 // populate dropdown
+                lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
                 uint16_t pos = 0;
                 bool savedStyleOK = false;
                 lv_dropdown_set_options(objects.map_style_dropdown, "");
@@ -3118,7 +3271,13 @@ void TFTView_480x222::loadMap(void)
                 }
                 MapTileSettings::setPrefix("/maps");
             } else {
-                messageAlert(_("No map tiles found on SDCard!"), true);
+                lv_dropdown_set_options(objects.map_style_dropdown, "");
+                lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
+                if (!hasOnlineTiles) {
+                    lv_dropdown_set_options(objects.map_style_dropdown, _("map tiles not found!"));
+                    lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
+                    messageAlert(_("No map tiles found on SDCard!"), true);
+                }
                 map->setNoTileImage(&img_no_tile_image);
             }
             map->forceRedraw();
@@ -5583,6 +5742,8 @@ void TFTView_480x222::updateHopsAway(uint32_t nodeNum, uint8_t hopsAway)
 
 void TFTView_480x222::updateConnectionStatus(const meshtastic_DeviceConnectionStatus &status)
 {
+    const bool wasWifiConnected = db.connectionStatus.has_wifi && db.connectionStatus.wifi.has_status &&
+                                  db.connectionStatus.wifi.status.is_connected;
     db.connectionStatus = status;
     if (status.has_wifi) {
         if (db.config.network.wifi_enabled || db.config.network.eth_enabled) {
@@ -5670,6 +5831,13 @@ void TFTView_480x222::updateConnectionStatus(const meshtastic_DeviceConnectionSt
     } else {
         lv_obj_add_flag(objects.home_ethernet_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(objects.home_ethernet_button, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (map && status.has_wifi && status.wifi.has_status) {
+        const bool isWifiConnected = status.wifi.status.is_connected;
+        if (isWifiConnected != wasWifiConnected) {
+            map->forceRedraw();
+        }
     }
 }
 
@@ -6281,10 +6449,18 @@ void TFTView_480x222::screenSaving(bool enabled)
     if (enabled) {
         // overlay main screen with blank screen to prevent accidentally pressing buttons
         lv_screen_load_anim(objects.blank_screen, LV_SCR_LOAD_ANIM_FADE_OUT, 0, 0, false);
+        lv_group_t *group = lv_group_get_default();
+        if (group) {
+            lv_group_add_obj(group, objects.blank_screen_button);
+        }
         lv_group_focus_obj(objects.blank_screen_button);
         screenLocked = true;
         screenUnlockRequest = false;
     } else {
+        lv_group_t *group = lv_group_get_default();
+        if (group) {
+            lv_group_remove_obj(objects.blank_screen_button);
+        }
         if (THIS->db.uiConfig.screen_lock) {
             ILOG_DEBUG("showing lock screen");
             lv_screen_load_anim(objects.lock_screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
@@ -6574,6 +6750,11 @@ void TFTView_480x222::setChannelName(const meshtastic_Channel &ch)
 void TFTView_480x222::backup(uint32_t option)
 {
 #if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    if (option == 1) {
+        backupFullConfig();
+        return;
+    }
+
     meshtastic_Config_SecurityConfig_public_key_t &pubkey = db.config.security.public_key;
     meshtastic_Config_SecurityConfig_private_key_t &privkey = db.config.security.private_key;
 
@@ -6605,6 +6786,11 @@ void TFTView_480x222::backup(uint32_t option)
 void TFTView_480x222::restore(uint32_t option)
 {
 #if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    if (option == 1) {
+        restoreFullConfig();
+        return;
+    }
+
     meshtastic_Config_SecurityConfig_public_key_t &pubkey = db.config.security.public_key;
     meshtastic_Config_SecurityConfig_private_key_t &privkey = db.config.security.private_key;
 
@@ -6644,6 +6830,276 @@ void TFTView_480x222::restore(uint32_t option)
         messageAlert(_("Failed to retrieve keys!"), true);
     }
     sd.close();
+#endif
+}
+
+// backup file format constants
+static const char BACKUP_MAGIC[4] = {'M', 'C', 'F', 'G'};
+static const uint8_t BACKUP_VERSION = 1;
+
+enum BackupSectionType : uint8_t {
+    SECTION_END = 0x00,
+    SECTION_CONFIG = 0x01,
+    SECTION_MODULE_CONFIG = 0x02,
+    SECTION_CHANNEL = 0x03,
+    SECTION_USER = 0x04,
+    SECTION_UI_CONFIG = 0x05,
+};
+
+// TODO: Move backupFullConfig/restoreFullConfig to MeshtasticView base class to avoid
+// duplication between TFTView_320x240 and TFTView_480x222 — the logic is display-independent.
+bool TFTView_480x222::backupFullConfig(void)
+{
+#if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    std::stringstream path;
+    path << "/backup/" << std::hex << std::setw(8) << std::setfill('0') << ownNode << ".cfg";
+
+#if defined(ARCH_PORTDUINO) || defined(HAS_SD_MMC)
+    SDFs.mkdir("/backup");
+    File sd = SDFs.open(path.str().c_str(), FILE_WRITE);
+#else
+    SDFs.mkdir("/backup");
+    FsFile sd = SDFs.open(path.str().c_str(), O_RDWR | O_CREAT | O_TRUNC);
+#endif
+
+    if (!sd) {
+        ILOG_ERROR("open file %s for backup failed", path.str().c_str());
+        messageAlert(_("Failed to create backup!"), true);
+        return false;
+    }
+
+    static uint8_t encode_buf[4096];
+
+    // write header: magic(4) + version(1) + nodeId(4) + timestamp(4)
+    sd.write((const uint8_t *)BACKUP_MAGIC, 4);
+    sd.write(&BACKUP_VERSION, 1);
+    uint32_t nodeId = ownNode;
+    sd.write((const uint8_t *)&nodeId, 4);
+    time_t now;
+    time(&now);
+    uint32_t ts = (uint32_t)now;
+    sd.write((const uint8_t *)&ts, 4);
+
+    // helper: encode protobuf struct and write section to file
+    auto writeSection = [&](uint8_t type, const pb_msgdesc_t *fields, const void *src) -> bool {
+        size_t size = pb_encode_to_bytes(encode_buf, sizeof(encode_buf), fields, src);
+        if (size == 0)
+            return false;
+        sd.write(&type, 1);
+        uint16_t sz = (uint16_t)size;
+        sd.write((const uint8_t *)&sz, 2);
+        sd.write(encode_buf, size);
+        return true;
+    };
+
+    bool ok = true;
+
+    // config (device, position, power, network, display, lora, bluetooth, security)
+    ok = ok && writeSection(SECTION_CONFIG, &meshtastic_LocalConfig_msg, &db.config);
+    // module config (mqtt, serial, extNotif, telemetry, etc.)
+    ok = ok && writeSection(SECTION_MODULE_CONFIG, &meshtastic_LocalModuleConfig_msg, &db.module_config);
+    // channels
+    for (int i = 0; ok && i < c_max_channels; i++) {
+        ok = writeSection(SECTION_CHANNEL, &meshtastic_Channel_msg, &db.channel[i]);
+    }
+    // user (use local device's short_name/long_name, not db.user which may contain another node's data)
+    {
+        meshtastic_User localUser = meshtastic_User_init_default;
+        strcpy(localUser.short_name, db.short_name);
+        strcpy(localUser.long_name, db.long_name);
+        ok = ok && writeSection(SECTION_USER, &meshtastic_User_msg, &localUser);
+    }
+    // ui config
+    ok = ok && writeSection(SECTION_UI_CONFIG, &meshtastic_DeviceUIConfig_msg, &db.uiConfig);
+
+    // end marker
+    uint8_t end = SECTION_END;
+    sd.write(&end, 1);
+    sd.close();
+
+    if (ok) {
+        ILOG_INFO("full config backup done: %s", path.str().c_str());
+    } else {
+        ILOG_ERROR("full config backup failed");
+        messageAlert(_("Backup failed!"), true);
+    }
+    return ok;
+#else
+    return false;
+#endif
+}
+
+bool TFTView_480x222::restoreFullConfig(void)
+{
+#if defined(HAS_SDCARD) || defined(HAS_SD_MMC) || defined(ARCH_PORTDUINO)
+    std::stringstream path;
+    path << "/backup/" << std::hex << std::setw(8) << std::setfill('0') << ownNode << ".cfg";
+
+#if defined(ARCH_PORTDUINO) || defined(HAS_SD_MMC)
+    File sd = SDFs.open(path.str().c_str(), FILE_READ);
+#else
+    FsFile sd = SDFs.open(path.str().c_str(), O_RDONLY);
+#endif
+
+    if (!sd) {
+        ILOG_ERROR("open file %s for restore failed", path.str().c_str());
+        messageAlert(_("Backup file not found!"), true);
+        return false;
+    }
+
+    // validate header
+    char magic[4];
+    if (sd.read((uint8_t *)magic, 4) != 4 || memcmp(magic, BACKUP_MAGIC, 4) != 0) {
+        ILOG_ERROR("invalid backup file magic");
+        messageAlert(_("Invalid backup file!"), true);
+        sd.close();
+        return false;
+    }
+
+    uint8_t version;
+    sd.read(&version, 1);
+    if (version != BACKUP_VERSION) {
+        ILOG_ERROR("unsupported backup version %d", version);
+        messageAlert(_("Unsupported backup version!"), true);
+        sd.close();
+        return false;
+    }
+
+    // skip nodeId(4) + timestamp(4)
+    uint8_t skip[8];
+    sd.read(skip, 8);
+
+    static uint8_t decode_buf[4096];
+    int restored = 0;
+
+    while (true) {
+        uint8_t type;
+        if (sd.read(&type, 1) != 1 || type == SECTION_END)
+            break;
+
+        uint16_t size;
+        if (sd.read((uint8_t *)&size, 2) != 2 || size > sizeof(decode_buf)) {
+            ILOG_ERROR("invalid section size %d", size);
+            break;
+        }
+
+        if ((size_t)sd.read(decode_buf, size) != size) {
+            ILOG_ERROR("failed to read section data");
+            break;
+        }
+
+        switch (type) {
+        case SECTION_CONFIG: {
+            meshtastic_LocalConfig config = meshtastic_LocalConfig_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_LocalConfig_msg, &config)) {
+                if (config.has_device)
+                    controller->sendConfig(std::move(config.device));
+                if (config.has_position)
+                    controller->sendConfig(std::move(config.position));
+                if (config.has_power)
+                    controller->sendConfig(std::move(config.power));
+                if (config.has_network)
+                    controller->sendConfig(std::move(config.network));
+                if (config.has_display)
+                    controller->sendConfig(std::move(config.display));
+                if (config.has_lora)
+                    controller->sendConfig(std::move(config.lora));
+                if (config.has_bluetooth)
+                    controller->sendConfig(std::move(config.bluetooth));
+                if (config.has_security)
+                    controller->sendConfig(std::move(config.security));
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode LocalConfig");
+            }
+            break;
+        }
+        case SECTION_MODULE_CONFIG: {
+            meshtastic_LocalModuleConfig mc = meshtastic_LocalModuleConfig_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_LocalModuleConfig_msg, &mc)) {
+                if (mc.has_mqtt)
+                    controller->sendConfig(std::move(mc.mqtt));
+                if (mc.has_serial)
+                    controller->sendConfig(std::move(mc.serial));
+                if (mc.has_external_notification)
+                    controller->sendConfig(std::move(mc.external_notification));
+                if (mc.has_store_forward)
+                    controller->sendConfig(std::move(mc.store_forward));
+                if (mc.has_range_test)
+                    controller->sendConfig(std::move(mc.range_test));
+                if (mc.has_telemetry)
+                    controller->sendConfig(std::move(mc.telemetry));
+                if (mc.has_canned_message)
+                    controller->sendConfig(std::move(mc.canned_message));
+                if (mc.has_audio)
+                    controller->sendConfig(std::move(mc.audio));
+                if (mc.has_remote_hardware)
+                    controller->sendConfig(std::move(mc.remote_hardware));
+                if (mc.has_neighbor_info)
+                    controller->sendConfig(std::move(mc.neighbor_info));
+                if (mc.has_ambient_lighting)
+                    controller->sendConfig(std::move(mc.ambient_lighting));
+                if (mc.has_detection_sensor)
+                    controller->sendConfig(std::move(mc.detection_sensor));
+                if (mc.has_paxcounter)
+                    controller->sendConfig(std::move(mc.paxcounter));
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode LocalModuleConfig");
+            }
+            break;
+        }
+        case SECTION_CHANNEL: {
+            meshtastic_Channel channel = meshtastic_Channel_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_Channel_msg, &channel)) {
+                channel.has_settings = true;
+                controller->sendConfig(channel, ownNode);
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode Channel");
+            }
+            break;
+        }
+        case SECTION_USER: {
+            meshtastic_User user = meshtastic_User_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_User_msg, &user)) {
+                // update local device's user data
+                strcpy(db.short_name, user.short_name);
+                strcpy(db.long_name, user.long_name);
+                controller->sendConfig(user, ownNode);
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode User");
+            }
+            break;
+        }
+        case SECTION_UI_CONFIG: {
+            meshtastic_DeviceUIConfig uiCfg = meshtastic_DeviceUIConfig_init_default;
+            if (pb_decode_from_bytes(decode_buf, size, &meshtastic_DeviceUIConfig_msg, &uiCfg)) {
+                controller->storeUIConfig(uiCfg);
+                restored++;
+            } else {
+                ILOG_ERROR("failed to decode UIConfig");
+            }
+            break;
+        }
+        default:
+            ILOG_WARN("unknown backup section type %d, skipping %d bytes", type, size);
+            break;
+        }
+    }
+
+    sd.close();
+
+    if (restored > 0) {
+        ILOG_INFO("full config restore done: %d sections", restored);
+    } else {
+        messageAlert(_("Restore failed!"), true);
+        return false;
+    }
+    return true;
+#else
+    return false;
 #endif
 }
 

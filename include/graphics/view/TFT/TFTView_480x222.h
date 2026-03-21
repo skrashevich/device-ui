@@ -227,6 +227,8 @@ class TFTView_480x222 : public MeshtasticView
 
     void backup(uint32_t option);
     void restore(uint32_t option);
+    bool backupFullConfig(void);
+    bool restoreFullConfig(void);
 
     void scanSignal(uint32_t scanNo);
     void handleTraceRouteResponse(const meshtastic_Routing &routing);
@@ -258,6 +260,7 @@ class TFTView_480x222 : public MeshtasticView
     void setChannelName(const meshtastic_Channel &ch);
     uint32_t timestamp(char *buf, uint32_t time, bool update);
     void updateLocationMap(uint32_t objects);
+    void ensureMapProviderDropdown(void);
 
     // response callbacks
     void onTextMessageCallback(const ResponseHandler::Request &, ResponseHandler::EventType, int32_t);
@@ -345,6 +348,7 @@ class TFTView_480x222 : public MeshtasticView
     static void ui_event_modem_preset_dropdown(lv_event_t *e);
     static void ui_event_setup_region_dropdown(lv_event_t *e);
     static void ui_event_map_style_dropdown(lv_event_t *e);
+    static void ui_event_map_provider_dropdown(lv_event_t *e);
 
     static void ui_event_calibration_screen_loaded(lv_event_t *e);
 
@@ -429,6 +433,7 @@ class TFTView_480x222 : public MeshtasticView
     std::array<lv_obj_t *, c_max_channels> ch_label;      // indexable label list for settings
     meshtastic_Channel *channel_scratch;                  // temporary scratch copy of channel db
     lv_obj_t *qr;                                         // qr code
+    lv_obj_t *mapProviderDropdown = nullptr;              // online tile provider dropdown (OSM/Yandex)
     MapPanel *map = nullptr;                              // map
     std::unordered_map<uint32_t, lv_obj_t *> nodeObjects; // nodeObjects displayed on map
     // extended default device profile struct with additional required data

@@ -16,36 +16,44 @@ The T-Lora Pager is a handheld LoRa communication device with a 480x222 display 
 The keyboard is organized in a QWERTY-style layout with multiple modifier states:
 
 ```
-Row 1: 1 2 3 4 5 6 7 8 9 0
-Row 2: Q W E R T Y U I O P
-Row 3: A S D F G H J K L (Shift)
-Row 4: (Sym) Z X C V B N M (Backspace)
+Row 1: Q  W  E  R  T  Y  U  I  O  P
+Row 2: A  S  D  F  G  H  J  K  L  Enter
+Row 3: Sym  Z  X  C  V  B  N  M  Backspace
+Row 4: Shift  Space
+```
+
+**Sym layer** (hold Sym, then press key):
+```
+Row 1: 1  2  3  4  5  6  7  8  9  0
+Row 2: *  /  +  -  =  :  '  "  @  Enter
+Row 3: Sym  _  $  ;  ?  !  ,  .  ESC
 ```
 
 ### Key Modifiers
 
-- **Shift**: Produces uppercase letters and alternate characters
-- **Sym**: Accesses symbols and navigation shortcuts
-- **Alt**: Used with Shift to toggle keyboard layout (EN/RU)
+- **Shift**: One-shot modifier — produces uppercase letters or alternate symbols on the next key press
+- **Sym**: One-shot modifier — accesses the symbol layer and, outside text fields, triggers navigation shortcuts
+- **Sym+Shift**: Chord to toggle keyboard layout (EN/RU); there is no separate Alt key on T-Pager
 
 ## Navigation Shortcuts (Sym + Key)
 
 When the **Sym modifier** is held, letter keys produce navigation commands instead of text characters. This applies when NOT in a text input field.
 
-| Shortcut | Action | LVGL Key | Use Case |
-|----------|--------|----------|----------|
-| Sym+Q (1) | Go Home | LV_KEY_HOME | Jump to home screen |
-| Sym+W (2) | Up | LV_KEY_UP | Move focus up in lists/menus |
-| Sym+E (3) | Next Screen | LV_KEY_NEXT | Cycle through screens |
-| Sym+A (*) | Left | LV_KEY_LEFT | Move focus left |
-| Sym+S (/) | Down | LV_KEY_DOWN | Move focus down in lists/menus |
-| Sym+D (+) | Right | LV_KEY_RIGHT | Move focus right |
-| Sym+T (5) | Confirm/Enter | LV_KEY_ENTER | Select/activate focused item |
-| Sym+F (-) | Previous Screen | LV_KEY_PREV | Cycle back through screens |
-| Backspace | Back/ESC | LV_KEY_ESC | Exit menu (outside text input) |
-| Sym+Shift | Toggle Layout | — | Switch between EN (Latin) and RU (Russian) keyboard layout |
+| Shortcut | Sym-layer char | Action | LVGL Key | Use Case |
+|----------|---------------|--------|----------|----------|
+| Sym+Q | 1 | Go Home | LV_KEY_HOME | Jump to home screen |
+| Sym+W | 2 | Up | LV_KEY_UP | Move focus up in lists/menus |
+| Sym+E | 3 | Next Screen | LV_KEY_NEXT | Cycle through screens |
+| Sym+R | 4 | Back/Close | LV_KEY_ESC | Close dialog or cancel |
+| Sym+T | 5 | Confirm/Enter | LV_KEY_ENTER | Select/activate focused item |
+| Sym+A | * | Left | LV_KEY_LEFT | Move focus left |
+| Sym+S | / | Down | LV_KEY_DOWN | Move focus down in lists/menus |
+| Sym+D | + | Right | LV_KEY_RIGHT | Move focus right |
+| Sym+F | - | Previous Screen | LV_KEY_PREV | Cycle back through screens |
+| Backspace | — | Navigate Home | navigateHomeCallback | Go to home screen (outside text input) |
+| Sym+Shift | — | Toggle Layout | — | Switch between EN (Latin) and RU (Russian) keyboard layout |
 
-**Note**: Inside text input fields, Sym+key produces the corresponding symbol character (1, 2, 3, *, /, +, 5, -) as defined by the symbol layer, not navigation commands.
+**Note**: Inside text input fields, Sym+key produces the corresponding symbol character (1, 2, 3, 4, 5, *, /, +, -) as defined by the symbol layer, not navigation commands. Backspace inside a text field deletes the character to the left of the cursor.
 
 ## Rotary Encoder
 
@@ -59,9 +67,9 @@ The rotary encoder is the primary input device for precise navigation and scroll
 
 - **Press (Click)**: Confirm/Enter the currently focused element
 
-- **Alt+Rotate**: Scroll content within a focused element (e.g., scroll within a long list)
+- **Sym+Rotate**: Scroll content within the active panel (nodes list, groups, messages, or settings) without changing focus
 
-The encoder provides smooth, gesture-like control for navigating large lists, maps, and message threads.
+The encoder provides smooth control for navigating large lists, maps, and message threads.
 
 ## Screen Navigation
 
@@ -83,12 +91,12 @@ Home → Nodes → Groups → Messages → Map → Settings → Home
 - **Green Border**: Indicates the currently focused node
 
 ### Map Screen
-- **Arrow Navigation**: Arrow buttons (←, ↑, ↓, →) control map panning
-  - Access via encoder Tab navigation to focus arrow buttons
-  - Use Sym+A (Left), Sym+W (Up), Sym+S (Down), Sym+D (Right)
-- **Zoom Controls**: Focusable zoom in/out buttons
-  - Accessible through standard navigation (Tab, Encoder)
-- **Encoder Rotate**: Scroll between different layers or overlays on the map
+- **Arrow Navigation**: Use Sym+A (Left), Sym+W (Up), Sym+S (Down), Sym+D (Right) to pan the map
+  - Arrow buttons on screen are also focusable via encoder/Tab navigation
+- **Zoom In**: Press Enter (or Sym+T) while on the map panel
+- **Zoom Out**: Press ESC (or Sym+R) while on the map panel
+- **Zoom Controls**: Focusable zoom in/out buttons also accessible through standard navigation (Tab, Encoder)
+- **Encoder Rotate**: Navigate between focusable map controls
 
 ### Settings Screen
 - **Encoder Rotate**: Scroll through available settings
@@ -118,12 +126,25 @@ When in a text field or compose box:
 
 The T-Pager supports both English (Latin) and Russian (Cyrillic) keyboard layouts.
 
-- **Toggle Layout**: Hold Sym and press Shift simultaneously
-- **Layout Change**: After the chord is released, the keyboard layout switches
+- **Toggle Layout**: Press Sym, then press Shift (chord — both must be pressed within the same modifier window)
+- **Layout Change**: After the chord, the keyboard layout switches
   - EN mode: QWERTY with standard Latin characters and symbols
-  - RU mode: Phonetic Cyrillic mapping (Q→Й, W→Ц, etc.)
-- **Indicator**: ILOG messages indicate layout changes (when debug logging is enabled)
+  - RU mode: Phonetic Cyrillic mapping via ЙЦУКЕН (Q→й, W→ц, E→у, R→к, T→е, etc.)
 - **Cooldown**: Layout changes have a 700ms debounce to prevent accidental re-triggers
+
+### Russian letters only accessible via Sym layer (RU mode)
+
+Seven Cyrillic letters have no direct key on the 31-key layout and are entered using Sym+key in RU mode:
+
+| Shortcut | Russian letter |
+|----------|---------------|
+| Sym+G (=) | ё |
+| Sym+H (:) | х |
+| Sym+J (') | э |
+| Sym+K (") | ъ |
+| Sym+C (;) | ж |
+| Sym+N (,) | б |
+| Sym+M (.) | ю |
 
 ## Accessibility
 

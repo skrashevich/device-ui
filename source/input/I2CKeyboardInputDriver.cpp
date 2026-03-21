@@ -687,7 +687,8 @@ void TLoraPagerKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *in
 
         // Sym modifier navigation: WASD-style when not in a textarea
         if (modifierState == 2) {
-            lv_obj_t *focused = lv_group_get_focused(lv_group_get_default());
+            lv_group_t *defGroup = lv_group_get_default();
+            lv_obj_t *focused = defGroup ? lv_group_get_focused(defGroup) : nullptr;
             bool isTextarea = focused && lv_obj_check_type(focused, &lv_textarea_class);
             if (!isTextarea) {
                 uint32_t navKey = 0;
@@ -695,6 +696,7 @@ void TLoraPagerKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *in
                     case '1': navKey = LV_KEY_HOME; break;  // sym+q -> HOME
                     case '2': navKey = LV_KEY_UP; break;    // sym+w -> UP
                     case '3': navKey = LV_KEY_NEXT; break;  // sym+e -> NEXT
+                    case '4': navKey = LV_KEY_ESC; break;   // sym+r -> ESC (close/cancel/back)
                     case '*': navKey = LV_KEY_LEFT; break;  // sym+a -> LEFT
                     case '/': navKey = LV_KEY_DOWN; break;  // sym+s -> DOWN
                     case '+': navKey = LV_KEY_RIGHT; break; // sym+d -> RIGHT
@@ -765,7 +767,8 @@ void TLoraPagerKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *in
             break;
         case 0x08: // Backspace
         {
-            lv_obj_t *focused = lv_group_get_focused(lv_group_get_default());
+            lv_group_t *defGroup = lv_group_get_default();
+            lv_obj_t *focused = defGroup ? lv_group_get_focused(defGroup) : nullptr;
             if (focused && lv_obj_check_type(focused, &lv_textarea_class)) {
                 data->key = LV_KEY_BACKSPACE;
             } else if (I2CKeyboardInputDriver::navigateHomeCallback) {
