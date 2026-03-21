@@ -1126,11 +1126,8 @@ void TFTView_Common::addNode(uint32_t nodeNum, uint8_t ch, const char *userShort
         lastHeard = std::min(THIS->curtime, (time_t)lastHeard); // adapt values too large
 
         char buf[20];
-        bool isOnline = THIS->lastHeardToString(lastHeard, buf);
+        THIS->lastHeardToString(lastHeard, buf);
         lv_label_set_text(ui_lastHeardLabel, buf);
-        if (isOnline) {
-            THIS->nodesOnline++;
-        }
     } else {
         lv_label_set_text(ui_lastHeardLabel, "");
     }
@@ -1317,12 +1314,6 @@ void TFTView_Common::purgeNode(uint32_t nodeNum)
     lv_obj_t *p = children[i];
     uint32_t oldest = (unsigned long)(p->LV_OBJ_IDX(node_lbl_idx)->user_data);
     uint32_t lastHeard = (unsigned long)p->LV_OBJ_IDX(node_lh_idx)->user_data;
-    if (lastHeard > 0) {
-        char buf[20];
-        if (THIS->lastHeardToString(lastHeard, buf))
-            THIS->nodesOnline--;
-    }
-
     ILOG_INFO("removing oldest node 0x%08x", oldest);
     lv_obj_delete(p);
     {
@@ -1550,6 +1541,14 @@ void TFTView_Common::setNodeImage(uint32_t nodeNum, eRole role, bool unmessagabl
 
 void TFTView_Common::updateNodesStatus(void)
 {
+    uint16_t online = 0;
+    for (auto &it : THIS->nodes) {
+        time_t lastHeard = (time_t)it.second->LV_OBJ_IDX(node_lh_idx)->user_data;
+        if (lastHeard > 0 && THIS->curtime - lastHeard <= THIS->secs_until_offline)
+            online++;
+    }
+    THIS->nodesOnline = online;
+
     char buf[40];
     lv_snprintf(buf, sizeof(buf), _p("%d of %d nodes online", THIS->nodeCount), THIS->nodesOnline, THIS->nodeCount);
     lv_label_set_text(objects.home_nodes_label, buf);
@@ -1588,9 +1587,7 @@ void TFTView_Common::updateLastHeard(uint32_t nodeNum)
         it->second->LV_OBJ_IDX(node_lh_idx)->user_data = (void *)THIS->curtime;
         lv_label_set_text(it->second->LV_OBJ_IDX(node_lh_idx), _("now"));
         if (it->first != THIS->ownNode) {
-            char buf[20];
-            if (lastHeard > 0 && !THIS->lastHeardToString(lastHeard, buf)) {
-                THIS->nodesOnline++;
+            if (lastHeard > 0 && THIS->curtime - lastHeard >= THIS->secs_until_offline) {
                 applyNodesFilter(nodeNum);
                 updateNodesStatus();
             }
@@ -1608,7 +1605,6 @@ void TFTView_Common::updateLastHeard(uint32_t nodeNum)
 
 void TFTView_Common::updateAllLastHeard(void)
 {
-    uint16_t online = 0;
     time_t lastHeard;
     for (auto it : THIS->nodes) {
         char buf[32];
@@ -1619,13 +1615,10 @@ void TFTView_Common::updateAllLastHeard(void)
             lastHeard = (time_t)it.second->LV_OBJ_IDX(node_lh_idx)->user_data;
         }
         if (lastHeard) {
-            bool isOnline = THIS->lastHeardToString(lastHeard, buf);
+            THIS->lastHeardToString(lastHeard, buf);
             lv_label_set_text(it.second->LV_OBJ_IDX(node_lh_idx), buf);
-            if (isOnline)
-                online++;
         }
     }
-    THIS->nodesOnline = online;
     updateNodesFiltered(true);
     updateNodesStatus();
 }
