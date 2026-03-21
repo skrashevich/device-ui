@@ -6646,6 +6646,74 @@ void TFTView_Common::handleResponse(uint32_t from, uint32_t id, const meshtastic
     // route contains only intermediate nodes, so add our node
     addNodeToTraceRoute(ownNode, objects.trace_route_panel);
 }
+
+void TFTView_Common::addNodeToTraceRoute(uint32_t nodeNum, lv_obj_t *panel)
+{
+    // check if node exists, and get its panel
+    lv_obj_t *nodePanel = nullptr;
+    auto it = nodes.find(nodeNum);
+    if (it != nodes.end()) {
+        nodePanel = it->second;
+    }
+    lv_obj_t *btn = lv_btn_create(panel);
+    lv_obj_set_pos(btn, 0, 0);
+    lv_obj_set_size(btn, LV_PCT(100), 38);
+    add_style_settings_button_style(btn);
+    lv_obj_set_style_align(btn, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_ofs_y(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(btn, colorMidGray, LV_PART_MAIN | LV_STATE_DEFAULT);
+    {
+        {
+            lv_obj_t *img = lv_img_create(btn);
+            if (nodePanel) {
+                setNodeImage(nodeNum, (MeshtasticView::eRole)(unsigned long)nodePanel->LV_OBJ_IDX(node_img_idx)->user_data, false,
+                             img);
+            } else {
+                setNodeImage(0, eRole::unknown, false, img);
+            }
+            lv_obj_set_pos(img, -5, 3);
+            lv_obj_set_size(img, 32, 32);
+            lv_obj_clear_flag(img, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_style_border_width(img, 3, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_image_recolor_opa(img, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_align(img, LV_ALIGN_TOP_LEFT, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_radius(img, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(img, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+        {
+            // TraceRouteToButtonLabel
+            lv_obj_t *label = lv_label_create(btn);
+            lv_obj_set_pos(label, 35, 10);
+            lv_obj_set_size(label, LV_PCT(80), LV_SIZE_CONTENT);
+            lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL);
+            if (nodePanel) {
+                if (nodeNum != ownNode) {
+                    lv_obj_add_event_cb(btn, ui_event_trace_route_node, LV_EVENT_CLICKED, nodePanel);
+                    lv_label_set_text(label, lv_label_get_text(nodePanel->LV_OBJ_IDX(node_lbs_idx)));
+                    if (strlen(lv_label_get_text(label)) >= 5)
+                        lv_obj_set_pos(label, 35, -1);
+                } else {
+                    lv_label_set_text(label, lv_label_get_text(nodePanel->LV_OBJ_IDX(node_lbl_idx)));
+                }
+            } else {
+                char buf[20];
+                if (nodeNum != UINT32_MAX) {
+                    lv_snprintf(buf, 16, "!%08x", nodeNum);
+                    lv_label_set_text(label, buf);
+                } else
+                    lv_label_set_text(label, _("unknown"));
+            }
+            lv_obj_set_style_align(label, LV_ALIGN_TOP_LEFT, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+    }
+}
+
 void TFTView_Common::messageAlert(const char *alert, bool show)
 {
     lv_label_set_text(objects.alert_label, alert);
