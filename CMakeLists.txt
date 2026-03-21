@@ -8,6 +8,15 @@ project(device_ui VERSION ${ver} HOMEPAGE_URL https://github.com/meshtastic/devi
 
 message(STATUS "device-ui version: ${PROJECT_VERSION}")
 
+execute_process(COMMAND git describe --tags --always
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE DEVICE_UI_GIT_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET)
+if(NOT DEVICE_UI_GIT_VERSION)
+    set(DEVICE_UI_GIT_VERSION "unknown")
+endif()
+
 set(MAIN_PROJECT OFF)
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(MAIN_PROJECT ON)
@@ -29,6 +38,7 @@ set(GENERATED_VIEW ${VIEW} "ui_320x240")
 message(STATUS "Using C++${CMAKE_CXX_STANDARD}")
 message(STATUS "Using Generated View: " ${GENERATED_VIEW})
 
+add_compile_definitions(DEVICE_UI_VERSION="${DEVICE_UI_GIT_VERSION}")
 add_compile_definitions(ARCH_PORTDUINO)
 add_compile_definitions(ARDUINO)
 add_compile_definitions(VIEW_320x240)

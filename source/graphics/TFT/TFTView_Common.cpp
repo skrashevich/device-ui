@@ -4352,7 +4352,13 @@ void TFTView_Common::init(IClientBase *client)
         lv_obj_set_pos(objects.boot_logo, 0, 0);
         lv_obj_add_flag(objects.firmware_label, LV_OBJ_FLAG_HIDDEN);
     } else {
+#ifdef DEVICE_UI_VERSION
+        char version_buf[64];
+        snprintf(version_buf, sizeof(version_buf), "%s (UI: %s)", firmware_version, DEVICE_UI_VERSION);
+        lv_label_set_text(objects.firmware_label, version_buf);
+#else
         lv_label_set_text(objects.firmware_label, firmware_version);
+#endif
     }
 
     time(&lastrun60);

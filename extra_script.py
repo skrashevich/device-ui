@@ -1,6 +1,18 @@
 # See https://docs.platformio.org/en/latest/manifests/library-json/fields/build/extrascript.html
 Import("env")
 from os.path import join, realpath
+import subprocess
+
+# Get git version tag for splash screen display
+try:
+    git_version = subprocess.check_output(
+        ["git", "-C", realpath("."), "describe", "--tags", "--always"],
+        stderr=subprocess.DEVNULL
+    ).decode("utf-8").strip()
+except Exception:
+    git_version = "unknown"
+
+env.Append(CPPDEFINES=[("DEVICE_UI_VERSION", env.StringifyMacro(git_version))])
 # Base srcFilter. Cannot be set in library.json.
 src_filter = [
     "+<resources>",
