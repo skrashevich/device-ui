@@ -145,22 +145,64 @@ def binary_to_c_header(data: bytes, var_name: str = "mesh_model_data") -> str:
     return "\n".join(lines)
 
 
+def prune_model(model: dict, threshold: int = 50, max_order: int = None) -> dict:
+    """Prune model by removing low-count contexts and limiting order."""
+    order = model["o"]
+    if max_order is not None:
+        order = min(order, max_order)
+
+    pruned = {"o": order, "v": model["v"], "c": []}
+    total_ctx = 0
+    for n in range(order + 1):
+        d = {}
+        min_count = threshold if n >= 3 else 1
+        if n < len(model["c"]):
+            for ctx, counts in model["c"][n].items():
+                t = sum(counts.values())
+                if t >= min_count:
+                    d[ctx] = counts
+        pruned["c"].append(d)
+        total_ctx += len(d)
+
+    return pruned, total_ctx
+
+
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <model.json|URL> [output.h]", file=sys.stderr)
-        print(f"  Local:  {sys.argv[0]} model.json generated/mesh_model_data.h", file=sys.stderr)
-        print(f"  URL:    {sys.argv[0]} https://example.com/model.json generated/mesh_model_data.h", file=sys.stderr)
-        sys.exit(1)
+    import argparse
 
-    source = sys.argv[1]
-    output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("mesh_model_data.h")
+    parser = argparse.ArgumentParser(
+        description="Export mesh-compressor JSON model to binary C++ header"
+    )
+    parser.add_argument("source", help="Path to model.json or URL")
+    parser.add_argument(
+        "output", nargs="?", default="mesh_model_data.h", help="Output .h file path"
+    )
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=50,
+        help="Min total count for contexts at order >= 3 (default: 50)",
+    )
+    parser.add_argument(
+        "--max-order",
+        type=int,
+        default=None,
+        help="Max n-gram order to export (default: use model order)",
+    )
+    args = parser.parse_args()
 
-    model = load_json_source(source)
+    output_path = Path(args.output)
+
+    model = load_json_source(args.source)
 
     print(f"  Order: {model['o']}")
     print(f"  Vocab: {len(model['v'])} symbols")
     total_contexts = sum(len(level) for level in model["c"])
     print(f"  Contexts: {total_contexts}")
+
+    if args.threshold != 50 or args.max_order is not None:
+        model, total_contexts = prune_model(model, args.threshold, args.max_order)
+        print(f"  Pruned: order={model['o']}, threshold={args.threshold}, contexts={total_contexts}")
 
     print("Converting to binary...")
     binary = json_to_binary(model)
