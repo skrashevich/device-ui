@@ -380,6 +380,11 @@ class TFTView_Common : public MeshtasticView
     bool nodesChanged;
     bool processingFilter;
     bool packetLogEnabled;
+#if HAS_MESH_COMPRESSOR
+    bool compressionEnabled;
+    lv_obj_t *compressionButton;
+    lv_obj_t *compressionLabel;
+#endif
     bool detectorRunning;
     bool cardDetected;
     bool formatSD;

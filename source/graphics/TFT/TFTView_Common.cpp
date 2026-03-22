@@ -5009,6 +5009,38 @@ void TFTView_Common::ui_events_init(void)
     lv_obj_add_event_cb(objects.basic_settings_reset_button, ui_event_reset_button, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(objects.basic_settings_reboot_button, ui_event_reboot_button, LV_EVENT_CLICKED, NULL);
 
+#if HAS_MESH_COMPRESSOR
+    // Create compression toggle button programmatically in basic settings
+    {
+        compressionEnabled = true; // default on
+        compressionButton = lv_btn_create(objects.tab_page_basic_settings);
+        lv_obj_set_size(compressionButton, LV_PCT(95), 30);
+        lv_obj_set_style_align(compressionButton, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
+        add_style_settings_button_style(compressionButton);
+        lv_obj_set_style_shadow_width(compressionButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(compressionButton, lv_color_hex(0xff4db270), LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_text_color(compressionButton, lv_color_hex(0xff015114), LV_PART_MAIN | LV_STATE_PRESSED);
+
+        compressionLabel = lv_label_create(compressionButton);
+        lv_obj_set_size(compressionLabel, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_label_set_long_mode(compressionLabel, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_align(compressionLabel, LV_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(compressionLabel, _("Compression: on"));
+
+        lv_obj_add_event_cb(
+            compressionButton,
+            [](lv_event_t *e) {
+                auto *self = static_cast<TFTView_Common *>(lv_event_get_user_data(e));
+                self->compressionEnabled = !self->compressionEnabled;
+                lv_label_set_text(self->compressionLabel,
+                                  self->compressionEnabled ? _("Compression: on") : _("Compression: off"));
+                self->controller->setCompressionEnabled(self->compressionEnabled);
+                ILOG_INFO("Text compression %s", self->compressionEnabled ? "enabled" : "disabled");
+            },
+            LV_EVENT_CLICKED, this);
+    }
+#endif
+
     lv_obj_add_event_cb(objects.reboot_button, ui_event_device_reboot_button, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(objects.progmode_button, ui_event_device_progmode_button, LV_EVENT_ALL, NULL);
     lv_obj_add_event_cb(objects.shutdown_button, ui_event_device_shutdown_button, LV_EVENT_CLICKED, NULL);
