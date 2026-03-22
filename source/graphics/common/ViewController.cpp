@@ -5,6 +5,10 @@
 #include "util/LogMessage.h"
 #include <algorithm>
 
+#if HAS_MESH_COMPRESSOR
+#include "generated/mesh_model_data.h"
+#endif
+
 #if defined(ARCH_PORTDUINO)
 #include "PortduinoFS.h"
 fs::FS &persistentFS = PortduinoFS;
@@ -32,6 +36,13 @@ void ViewController::init(MeshtasticView *gui, IClientBase *_client)
     time(&lastrun10);
     view = gui;
     client = _client;
+#if HAS_MESH_COMPRESSOR
+    if (!compressor_.isReady()) {
+        compressor_.init(mesh_model_data, mesh_model_data_size);
+        ILOG_INFO("MeshCompressor initialized: model order=%d, vocab=%zu", compressor_.model().order(),
+                  compressor_.model().vocabSize());
+    }
+#endif
     if (client) {
         // client status handler
         client->setNotifyCallback([this](IClientBase::ConnectionStatus status, const char *info) {
@@ -476,8 +487,24 @@ void ViewController::sendTextMessage(uint32_t to, uint8_t ch, uint8_t hopLimit, 
     size_t msgLen = strlen(textmsg);
     assert(msgLen <= (size_t)DATA_PAYLOAD_LEN);
 
+#if HAS_MESH_COMPRESSOR
+    // Try to compress: if compressed Base91 is smaller than original, send compressed
+    if (compressor_.isReady() && msgLen > 0) {
+        std::string b91 = compressor_.compressToBase91(textmsg);
+        if (!b91.empty() && b91.size() < msgLen && b91.size() <= DATA_PAYLOAD_LEN) {
+            ILOG_DEBUG("compressed msg %zu -> %zu bytes (%.0f%%)", msgLen, b91.size(),
+                       100.0 * (1.0 - (double)b91.size() / (double)msgLen));
+            if (send(to, ch, hopLimit, requestId, meshtastic_PortNum_TEXT_MESSAGE_APP, false, usePkc,
+                     (const uint8_t *)b91.c_str(), b91.size())) {
+                // Store original text in log (not compressed) for local display/restore
+                log.write(LogMessageEnv(myNodeNum, to, ch, msgTime, LogMessage::eDefault, false, msgLen, (const uint8_t *)textmsg));
+            }
+            return;
+        }
+    }
+#endif
+
     if (send(to, ch, hopLimit, requestId, meshtastic_PortNum_TEXT_MESSAGE_APP, false, usePkc, (const uint8_t *)textmsg, msgLen)) {
-        // ILOG_DEBUG("storing msg to:0x%08x, ch:%d, time:%d, size:%d, '%s'", to, ch, msgTime, msgLen, textmsg);
         log.write(LogMessageEnv(myNodeNum, to, ch, msgTime, LogMessage::eDefault, false, msgLen, (const uint8_t *)textmsg));
     }
 }
@@ -935,9 +962,24 @@ bool ViewController::packetReceived(const meshtastic_MeshPacket &p)
             }
         }
         uint32_t time = p.rx_time;
-        view->newMessage(p.from, p.to, p.channel, (const char *)p.decoded.payload.bytes, time);
-        log.write(LogMessageEnv(p.from, p.to, p.channel, time, LogMessage::eDefault, false, p.decoded.payload.size,
-                                (const uint8_t *)p.decoded.payload.bytes));
+        const char *msgText = (const char *)p.decoded.payload.bytes;
+        size_t msgSize = p.decoded.payload.size;
+
+#if HAS_MESH_COMPRESSOR
+        // Detect compressed messages: Base91-encoded with '~' prefix
+        std::string decompressedBuf;
+        if (compressor_.isReady() && msgSize > 1 && msgText[0] == '~') {
+            decompressedBuf = compressor_.decompressFromBase91(std::string(msgText, msgSize));
+            if (!decompressedBuf.empty()) {
+                ILOG_DEBUG("decompressed msg %zu -> %zu bytes", msgSize, decompressedBuf.size());
+                msgText = decompressedBuf.c_str();
+                msgSize = decompressedBuf.size();
+            }
+        }
+#endif
+
+        view->newMessage(p.from, p.to, p.channel, msgText, time);
+        log.write(LogMessageEnv(p.from, p.to, p.channel, time, LogMessage::eDefault, false, msgSize, (const uint8_t *)msgText));
         break;
     }
     case meshtastic_PortNum_POSITION_APP: {

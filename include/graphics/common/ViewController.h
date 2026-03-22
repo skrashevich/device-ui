@@ -4,6 +4,10 @@
 #include "util/LogRotate.h"
 #include <time.h>
 
+#if HAS_MESH_COMPRESSOR
+#include "comms/compress/MeshCompressor.h"
+#endif
+
 class MeshtasticView;
 
 class ViewController
@@ -114,4 +118,8 @@ class ViewController
     bool configCompleted;       // true if all data from node has been received
     bool messagesRestored;      // true if log messages have been restored
     bool requestConfigRequired; // true if config needs to be reloaded from the node
+
+#if HAS_MESH_COMPRESSOR
+    mesh::MeshCompressor compressor_;
+#endif
 };

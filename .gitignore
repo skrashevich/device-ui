@@ -9,3 +9,4 @@ build-*
 .DS_Store
 _codeql_detected_source_root
 .omc
+generated/mesh_model_data.h
