@@ -5012,7 +5012,7 @@ void TFTView_Common::ui_events_init(void)
 #if HAS_MESH_COMPRESSOR
     // Create compression toggle button programmatically in basic settings
     {
-        compressionEnabled = true; // default on
+        compressionEnabled = false; // default off
         compressionButton = lv_btn_create(objects.tab_page_basic_settings);
         lv_obj_set_size(compressionButton, LV_PCT(95), 30);
         lv_obj_set_style_align(compressionButton, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -5025,7 +5025,8 @@ void TFTView_Common::ui_events_init(void)
         lv_obj_set_size(compressionLabel, LV_PCT(100), LV_SIZE_CONTENT);
         lv_label_set_long_mode(compressionLabel, LV_LABEL_LONG_DOT);
         lv_obj_set_style_align(compressionLabel, LV_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_label_set_text(compressionLabel, _("Compression: on"));
+        lv_label_set_text(compressionLabel, _("Compression: off"));
+        controller->setCompressionEnabled(false);
 
         lv_obj_add_event_cb(
             compressionButton,

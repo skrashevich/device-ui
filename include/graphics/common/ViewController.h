@@ -121,7 +121,7 @@ class ViewController
 
 #if HAS_MESH_COMPRESSOR
     mesh::MeshCompressor compressor_;
-    bool compressionEnabled_ = true;
+    bool compressionEnabled_ = false;
   public:
     void setCompressionEnabled(bool enabled) { compressionEnabled_ = enabled; }
     bool isCompressionEnabled() const { return compressionEnabled_ && compressor_.isReady(); }
