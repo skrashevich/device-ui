@@ -155,7 +155,7 @@ def prune_model(model: dict, threshold: int = 50, max_order: int = None) -> dict
     total_ctx = 0
     for n in range(order + 1):
         d = {}
-        min_count = threshold if n >= 3 else 1
+        min_count = 1 if n == 0 else threshold
         if n < len(model["c"]):
             for ctx, counts in model["c"][n].items():
                 t = sum(counts.values())

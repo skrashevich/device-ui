@@ -36,13 +36,6 @@ void ViewController::init(MeshtasticView *gui, IClientBase *_client)
     time(&lastrun10);
     view = gui;
     client = _client;
-#if HAS_MESH_COMPRESSOR
-    if (!compressor_.isReady()) {
-        compressor_.init(mesh_model_data, mesh_model_data_size);
-        ILOG_INFO("MeshCompressor initialized: model order=%d, vocab=%zu", compressor_.model().order(),
-                  compressor_.model().vocabSize());
-    }
-#endif
     if (client) {
         // client status handler
         client->setNotifyCallback([this](IClientBase::ConnectionStatus status, const char *info) {
@@ -57,6 +50,22 @@ void ViewController::init(MeshtasticView *gui, IClientBase *_client)
     }
     log.init();
 }
+
+#if HAS_MESH_COMPRESSOR
+void ViewController::ensureCompressorReady()
+{
+    if (!compressor_.isReady()) {
+        ILOG_INFO("Loading MeshCompressor model (%zu bytes)...", mesh_model_data_size);
+        bool ok = compressor_.init(mesh_model_data, mesh_model_data_size);
+        if (ok) {
+            ILOG_INFO("MeshCompressor ready: order=%d, vocab=%zu", compressor_.model().order(),
+                      compressor_.model().vocabSize());
+        } else {
+            ILOG_ERROR("MeshCompressor init FAILED (model_size=%zu)", mesh_model_data_size);
+        }
+    }
+}
+#endif
 
 /**
  * @brief runOnce need to be called periodically to process send/receive queues
@@ -489,17 +498,25 @@ void ViewController::sendTextMessage(uint32_t to, uint8_t ch, uint8_t hopLimit, 
 
 #if HAS_MESH_COMPRESSOR
     // Try to compress: if compressed Base91 is smaller than original, send compressed
-    if (isCompressionEnabled() && msgLen > 0) {
-        std::string b91 = compressor_.compressToBase91(textmsg);
-        if (!b91.empty() && b91.size() < msgLen && b91.size() <= DATA_PAYLOAD_LEN) {
-            ILOG_DEBUG("compressed msg %zu -> %zu bytes (%.0f%%)", msgLen, b91.size(),
-                       100.0 * (1.0 - (double)b91.size() / (double)msgLen));
-            if (send(to, ch, hopLimit, requestId, meshtastic_PortNum_TEXT_MESSAGE_APP, false, usePkc,
-                     (const uint8_t *)b91.c_str(), b91.size())) {
-                // Store original text in log (not compressed) for local display/restore
-                log.write(LogMessageEnv(myNodeNum, to, ch, msgTime, LogMessage::eDefault, false, msgLen, (const uint8_t *)textmsg));
+    if (compressionEnabled_ && msgLen > 0) {
+        ensureCompressorReady();
+        if (compressor_.isReady()) {
+            std::string b91 = compressor_.compressToBase91(textmsg);
+            if (!b91.empty() && b91.size() < msgLen && b91.size() <= DATA_PAYLOAD_LEN) {
+                ILOG_INFO("compressed msg %zu -> %zu bytes (%.0f%%)", msgLen, b91.size(),
+                          100.0 * (1.0 - (double)b91.size() / (double)msgLen));
+                if (send(to, ch, hopLimit, requestId, meshtastic_PortNum_TEXT_MESSAGE_APP, false, usePkc,
+                         (const uint8_t *)b91.c_str(), b91.size())) {
+                    // Store original text in log (not compressed) for local display/restore
+                    log.write(
+                        LogMessageEnv(myNodeNum, to, ch, msgTime, LogMessage::eDefault, false, msgLen, (const uint8_t *)textmsg));
+                }
+                return;
+            } else {
+                ILOG_INFO("compression not beneficial: b91=%zu orig=%zu (empty=%d)", b91.size(), msgLen, b91.empty());
             }
-            return;
+        } else {
+            ILOG_WARN("MeshCompressor not ready, sending uncompressed");
         }
     }
 #endif
@@ -967,13 +984,17 @@ bool ViewController::packetReceived(const meshtastic_MeshPacket &p)
 
 #if HAS_MESH_COMPRESSOR
         // Detect compressed messages: Base91-encoded with '~' prefix
+        // Only load model when we actually receive a compressed message (saves ~1MB PSRAM)
         std::string decompressedBuf;
-        if (compressor_.isReady() && msgSize > 1 && msgText[0] == '~') {
-            decompressedBuf = compressor_.decompressFromBase91(std::string(msgText, msgSize));
-            if (!decompressedBuf.empty()) {
-                ILOG_DEBUG("decompressed msg %zu -> %zu bytes", msgSize, decompressedBuf.size());
-                msgText = decompressedBuf.c_str();
-                msgSize = decompressedBuf.size();
+        if (msgSize > 1 && msgText[0] == '~') {
+            ensureCompressorReady();
+            if (compressor_.isReady()) {
+                decompressedBuf = compressor_.decompressFromBase91(std::string(msgText, msgSize));
+                if (!decompressedBuf.empty()) {
+                    ILOG_DEBUG("decompressed msg %zu -> %zu bytes", msgSize, decompressedBuf.size());
+                    msgText = decompressedBuf.c_str();
+                    msgSize = decompressedBuf.size();
+                }
             }
         }
 #endif

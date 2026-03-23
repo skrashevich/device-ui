@@ -270,6 +270,7 @@ bool NGramModel::loadFromBinary(const uint8_t *data, size_t len)
 
             ContextData cd;
             cd.total = 0;
+            cd.char_counts.reserve(num_pairs);
             for (uint16_t p = 0; p < num_pairs; p++) {
                 if (pos + 6 > len)
                     return false;
@@ -277,7 +278,7 @@ bool NGramModel::loadFromBinary(const uint8_t *data, size_t len)
                 pos += 2;
                 uint32_t count = readU32LE(data + pos);
                 pos += 4;
-                cd.char_counts[char_idx] = count;
+                cd.char_counts.push_back({char_idx, count});
                 cd.total += count;
             }
 
@@ -307,28 +308,13 @@ void NGramModel::ensureChar(const std::string &ch_utf8)
     if (vocab_.size() >= 65535)
         return; // uint16_t limit for char_counts keys
 
-    // Insert in sorted position
-    auto it = std::lower_bound(vocab_.begin(), vocab_.end(), ch_utf8);
-    int idx = static_cast<int>(it - vocab_.begin());
-    vocab_.insert(it, ch_utf8);
-
-    // Rebuild index (indices shifted)
-    vocab_idx_.clear();
-    for (size_t i = 0; i < vocab_.size(); i++) {
-        vocab_idx_[vocab_[i]] = static_cast<int>(i);
-    }
-
-    // Update char_counts keys in all levels (indices >= idx shifted by +1)
-    for (auto &level : levels_) {
-        for (auto &kv : level) {
-            std::unordered_map<uint16_t, uint32_t> new_counts;
-            for (auto &pair : kv.second.char_counts) {
-                uint16_t new_idx = pair.first >= static_cast<uint16_t>(idx) ? pair.first + 1 : pair.first;
-                new_counts[new_idx] = pair.second;
-            }
-            kv.second.char_counts = std::move(new_counts);
-        }
-    }
+    // Append to end — no index shifting, no map rebuilding needed.
+    // Both encoder and decoder call ensureChar in the same order
+    // (extra chars are transmitted sorted in the wire header),
+    // so vocab indices stay consistent across peers.
+    int idx = static_cast<int>(vocab_.size());
+    vocab_.push_back(ch_utf8);
+    vocab_idx_[ch_utf8] = idx;
 
     cdf_cache_.clear();
 }
@@ -338,7 +324,7 @@ void NGramModel::clearCache()
     cdf_cache_.clear();
 }
 
-std::vector<CdfEntry> NGramModel::getCdf(const std::string &context)
+PsramVector<CdfEntry> NGramModel::getCdf(const std::string &context)
 {
     auto it = cdf_cache_.find(context);
     if (it != cdf_cache_.end())
@@ -353,7 +339,7 @@ std::vector<CdfEntry> NGramModel::getCdf(const std::string &context)
     return cdf;
 }
 
-std::vector<CdfEntry> NGramModel::computeCdf(const std::string &context)
+PsramVector<CdfEntry> NGramModel::computeCdf(const std::string &context)
 {
     size_t n_vocab = vocab_.size();
 
@@ -367,15 +353,30 @@ std::vector<CdfEntry> NGramModel::computeCdf(const std::string &context)
     std::vector<ActiveOrder> active;
     double total_w = 0.0;
 
+    // Pre-compute UTF-8 char boundaries once (avoids repeated utf8Chars allocs)
+    size_t ctx_byte_len = context.size();
+    size_t ctx_char_offsets[64]; // byte offset of each UTF-8 char (max order ~9)
+    size_t ctx_n_chars = 0;
+    {
+        size_t i = 0;
+        while (i < ctx_byte_len && ctx_n_chars < 64) {
+            ctx_char_offsets[ctx_n_chars++] = i;
+            uint8_t c = static_cast<uint8_t>(context[i]);
+            if ((c & 0x80) == 0) i += 1;
+            else if ((c & 0xE0) == 0xC0) i += 2;
+            else if ((c & 0xF0) == 0xE0) i += 3;
+            else i += 4;
+            if (i > ctx_byte_len) i = ctx_byte_len;
+        }
+    }
+
     for (int n = order_; n >= 0; n--) {
         std::string ctx;
         if (n > 0) {
-            // Take last n bytes... but context is in UTF-8 characters, not bytes.
-            // We need the last n characters of the context string.
-            auto chars = utf8Chars(context);
-            size_t start = chars.size() > static_cast<size_t>(n) ? chars.size() - n : 0;
-            for (size_t i = start; i < chars.size(); i++)
-                ctx += chars[i];
+            // Take last n UTF-8 characters from context — zero allocations
+            size_t start_char = ctx_n_chars > static_cast<size_t>(n) ? ctx_n_chars - n : 0;
+            size_t start_byte = ctx_char_offsets[start_char];
+            ctx = context.substr(start_byte);
         }
 
         if (n < static_cast<int>(levels_.size())) {
@@ -391,7 +392,8 @@ std::vector<CdfEntry> NGramModel::computeCdf(const std::string &context)
 
     // Step 2: compute raw frequency for each vocab symbol
     // Start with uniform epsilon (1 per symbol)
-    std::vector<int32_t> freqs(n_vocab, 1);
+    // Use PsramVector to avoid exhausting internal SRAM on ESP32
+    PsramVector<int32_t> freqs(n_vocab, 1);
     int32_t epsilon_total = static_cast<int32_t>(n_vocab);
 
     if (total_w > 0.0) {
@@ -401,10 +403,9 @@ std::vector<CdfEntry> NGramModel::computeCdf(const std::string &context)
             const auto &level_data = levels_[a.n].at(a.ctx);
             double factor = (a.weight / total_w) * static_cast<double>(scale) / static_cast<double>(a.total);
 
-            for (const auto &pair : level_data.char_counts) {
-                uint16_t idx = pair.first;
-                if (idx < n_vocab) {
-                    freqs[idx] += static_cast<int32_t>(static_cast<double>(pair.second) * factor);
+            for (const auto &cc : level_data.char_counts) {
+                if (cc.idx < n_vocab) {
+                    freqs[cc.idx] += static_cast<int32_t>(static_cast<double>(cc.count) * factor);
                 }
             }
         }
@@ -427,7 +428,7 @@ std::vector<CdfEntry> NGramModel::computeCdf(const std::string &context)
             freqs[max_idx] += diff;
         } else {
             // Remove -diff from the most frequent symbols
-            std::vector<size_t> indices(n_vocab);
+            PsramVector<size_t> indices(n_vocab);
             for (size_t i = 0; i < n_vocab; i++)
                 indices[i] = i;
             std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) { return freqs[a] > freqs[b]; });
@@ -445,7 +446,7 @@ std::vector<CdfEntry> NGramModel::computeCdf(const std::string &context)
     }
 
     // Build CDF
-    std::vector<CdfEntry> cdf;
+    PsramVector<CdfEntry> cdf;
     cdf.reserve(n_vocab);
     uint32_t cum = 0;
     for (size_t i = 0; i < n_vocab; i++) {
@@ -545,7 +546,7 @@ int ArithmeticDecoder::readBit()
     return (data_[byte_idx] >> bit_idx) & 1;
 }
 
-uint32_t ArithmeticDecoder::decodeSymbol(const std::vector<CdfEntry> &cdf)
+uint32_t ArithmeticDecoder::decodeSymbol(const PsramVector<CdfEntry> &cdf)
 {
     if (cdf.empty())
         return UINT32_MAX;

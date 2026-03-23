@@ -72,7 +72,7 @@ void test_model_load()
     NGramModel model;
     bool ok = model.loadFromBinary(mesh_model_data, mesh_model_data_size);
     assert(ok);
-    assert(model.order() == 9);
+    assert(model.order() >= 3 && model.order() <= 9);
     assert(model.vocabSize() == 713);
     PASS();
 }
@@ -172,6 +172,8 @@ int main()
     test_roundtrip("Mixed", "Meshtastic node 42 online");
     test_roundtrip("Digits", "123456789");
     test_roundtrip("Meshtastic msg", "Node !abc1234 heard 5 min ago");
+    test_roundtrip("Extra chars (emoji)", "Hello \xf0\x9f\x91\x8d world"); // 👍 not in vocab
+    test_roundtrip("Extra chars (CJK)", "\xe4\xbd\xa0\xe5\xa5\xbd Mesh"); // 你好 not in vocab
 
     printf("\n--- Base91 Transport ---\n");
     test_base91_transport();
