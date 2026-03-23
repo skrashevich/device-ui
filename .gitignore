@@ -10,3 +10,4 @@ build-*
 _codeql_detected_source_root
 .omc
 generated/mesh_model_data.h
+mesh_model_data.h

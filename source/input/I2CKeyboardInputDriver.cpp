@@ -327,6 +327,7 @@ void I2CKeyboardInputDriver::keyboard_read(lv_indev_t *indev, lv_indev_data_t *d
     for (auto &keyboardDef : i2cKeyboardList) {
         keyboardDef->driver->readKeyboard(keyboardDef->address, indev, data);
         if (data->state == LV_INDEV_STATE_PRESSED) {
+            lv_display_trigger_activity(NULL);
             if (inputEventCallback) {
                 inputEventCallback();
             }

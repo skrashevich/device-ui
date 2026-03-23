@@ -111,6 +111,8 @@ void RotaryEncoderInputDriver::encoder_read(lv_indev_t *indev, lv_indev_data_t *
 
     // Normal encoder behavior - navigation
     data->enc_diff = encoderDiff;
+    if (encoderDiff != 0)
+        lv_display_trigger_activity(NULL);
     encoderDiff = 0;
 
     // Button handling
@@ -120,6 +122,7 @@ void RotaryEncoderInputDriver::encoder_read(lv_indev_t *indev, lv_indev_data_t *
     if (btnState == RotaryEncoder::BUTTON_PRESSED) {
         data->key = LV_KEY_ENTER;
         data->state = LV_INDEV_STATE_PRESSED;
+        lv_display_trigger_activity(NULL);
     } else if (btnState == RotaryEncoder::BUTTON_PRESSED_RELEASED) {
         // Button was pressed and released - reset for next press
         rotary->resetButton();
