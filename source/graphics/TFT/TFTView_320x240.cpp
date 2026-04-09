@@ -68,10 +68,6 @@ LV_IMAGE_DECLARE(node_location_pin24_image);
 #define THIS TFTView_320x240::instance() // need to use this in all static methods
 
 // forward declarations for free functions defined in TFTView_Common.cpp
-const char *mapProviderToString(MapTileProvider provider);
-MapTileProvider parseMapProvider(const char *provider);
-MapTileProvider loadPersistedMapProvider(void);
-void persistMapProvider(MapTileProvider provider);
 void syncVirtualKeyboardLayout(lv_obj_t *keyboard);
 const lv_font_t *getKeyboardFont(void);
 

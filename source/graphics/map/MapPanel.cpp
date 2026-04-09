@@ -55,21 +55,24 @@ void MapPanel::redraw(void)
     redrawCompleted = true;
     drawLocation();
     drawObjects();
-#else // incremental redraw: load exactly one tile per call
-    if (x < tilesX && y < tilesY) {
-        uint32_t hash = HASH(xStart + x, yStart + y);
-        tiles[hash] = std::move(std::unique_ptr<MapTile>(new MapTile(xStart + x, yStart + y)));
-        tiles[hash]->load(panel, x * size + xOffset, y * size + yOffset, noTileImage);
-        x++;
-        if (x >= tilesX) {
-            x = 0;
-            y++;
+#else // incremental redraw
+    for (int i = 0; i < tilesY; i++) {
+        if (x < tilesX && y < tilesY) {
+            uint32_t hash = HASH(xStart + x, yStart + y);
+            tiles[hash] = std::move(std::unique_ptr<MapTile>(new MapTile(xStart + x, yStart + y)));
+            tiles[hash]->load(panel, x * size + xOffset, y * size + yOffset, noTileImage);
+            x++;
+        } else {
+            if (y < tilesY) {
+                x = 0;
+                y++;
+                if (y >= tilesY) {
+                    redrawCompleted = true;
+                    drawLocation();
+                    drawObjects();
+                }
+            }
         }
-    }
-    if (y >= tilesY) {
-        redrawCompleted = true;
-        drawLocation();
-        drawObjects();
     }
 #endif
 }
@@ -130,7 +133,9 @@ void MapPanel::drawObject(MapObject &obj, bool count)
 {
     if (obj.draw) {
         if (!obj.point.isFiltered) {
-            obj.point.setZoom(MapTileSettings::getZoomLevel());
+            if (obj.point.zoomLevel != MapTileSettings::getZoomLevel()) {
+                obj.point.setZoom(MapTileSettings::getZoomLevel());
+            }
             // check if object is in the visible tile area
             auto tileIt = tiles.find(HASH(obj.point.xTile, obj.point.yTile));
             if (tileIt != tiles.end()) {

@@ -31,10 +31,7 @@ class TileService : public ITileService
 
     bool load(const char *name, void *img) override
     {
-        if (service && service->load(name, img)) {
-            return true;
-        }
-        return backup ? backup->load(name, img) : false;
+        return service ? service->load(name, img) : backup ? backup->load(name, img) : false;
     }
 
     virtual ~TileService();

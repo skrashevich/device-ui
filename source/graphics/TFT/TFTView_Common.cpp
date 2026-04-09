@@ -82,49 +82,6 @@ extern const lv_color_t colorMidGray = LV_COLOR_HEX(0x808080);
 extern const lv_color_t colorDarkGray = LV_COLOR_HEX(0x303030);
 extern const lv_color_t colorMesh = LV_COLOR_HEX(0x67ea94);
 
-constexpr const char *MAP_PROVIDER_PREF_PATH = "/map-provider.cfg";
-constexpr const char *MAP_PROVIDER_OSM = "osm";
-constexpr const char *MAP_PROVIDER_YANDEX = "yandex";
-
-const char *mapProviderToString(MapTileProvider provider)
-{
-    return provider == MapTileProvider::Yandex ? MAP_PROVIDER_YANDEX : MAP_PROVIDER_OSM;
-}
-
-MapTileProvider parseMapProvider(const char *provider)
-{
-    if (provider && std::strcmp(provider, MAP_PROVIDER_YANDEX) == 0) {
-        return MapTileProvider::Yandex;
-    }
-    return MapTileProvider::OSM;
-}
-
-MapTileProvider loadPersistedMapProvider(void)
-{
-    File file = fileSystem.open(MAP_PROVIDER_PREF_PATH, FILE_READ);
-    if (!file) {
-        return MapTileProvider::OSM;
-    }
-
-    char value[16] = {};
-    size_t read = file.readBytesUntil('\n', value, sizeof(value) - 1);
-    value[read] = '\0';
-    file.close();
-
-    return parseMapProvider(value);
-}
-
-void persistMapProvider(MapTileProvider provider)
-{
-    File file = fileSystem.open(MAP_PROVIDER_PREF_PATH, FILE_WRITE);
-    if (!file) {
-        ILOG_WARN("failed to persist map provider preference");
-        return;
-    }
-    file.print(mapProviderToString(provider));
-    file.close();
-}
-
 void syncVirtualKeyboardLayout(lv_obj_t *keyboard)
 {
     if (!keyboard) {
@@ -3194,23 +3151,6 @@ void TFTView_Common::ui_event_mapNodeButton(lv_event_t *e)
         ui_event_NodeButton(e);
 }
 
-void TFTView_Common::ui_event_map_provider_dropdown(lv_event_t *e)
-{
-    if (!THIS->mapProviderDropdown) {
-        return;
-    }
-
-    const uint16_t provider = lv_dropdown_get_selected(THIS->mapProviderDropdown);
-    const MapTileProvider tileProvider = provider == 1 ? MapTileProvider::Yandex : MapTileProvider::OSM;
-    MapTileSettings::setTileProvider(tileProvider);
-    persistMapProvider(tileProvider);
-    lv_obj_add_flag(objects.map_osd_panel, LV_OBJ_FLAG_HIDDEN);
-    if (THIS->map) {
-        THIS->map->setZoom(MapTileSettings::getZoomLevel());
-        THIS->map->forceRedraw();
-    }
-}
-
 void TFTView_Common::ui_event_map_style_dropdown(lv_event_t *e)
 {
     lv_dropdown_get_selected_str(objects.map_style_dropdown, THIS->db.uiConfig.map_data.style,
@@ -4389,8 +4329,6 @@ bool TFTView_Common::setupUIConfig(const meshtastic_DeviceUIConfig &uiconfig)
         controller->storeUIConfig(db.uiConfig);
     }
 
-    MapTileSettings::setTileProvider(loadPersistedMapProvider());
-
     lv_i18n_init(lv_i18n_language_pack);
     setLocale(db.uiConfig.language);
 
@@ -5357,30 +5295,8 @@ void TFTView_Common::ui_screen_event_cb(lv_event_t *e)
     }
 }
 
-void TFTView_Common::ensureMapProviderDropdown(void)
-{
-    if (!mapProviderDropdown) {
-        mapProviderDropdown = lv_dropdown_create(objects.map_osd_panel);
-        lv_obj_set_pos(mapProviderDropdown, 0, 100);
-        lv_obj_set_size(mapProviderDropdown, LV_PCT(85), LV_SIZE_CONTENT);
-        lv_dropdown_set_options(mapProviderDropdown, "OSM\nYandex");
-        add_style_drop_down_style(mapProviderDropdown);
-        lv_obj_set_style_align(mapProviderDropdown, LV_ALIGN_TOP_MID, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_top(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_bottom(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_left(mapProviderDropdown, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_row(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_column(mapProviderDropdown, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_event_cb(mapProviderDropdown, ui_event_map_provider_dropdown, LV_EVENT_VALUE_CHANGED, nullptr);
-    }
-
-    lv_dropdown_set_selected(mapProviderDropdown,
-                             MapTileSettings::getTileProvider() == MapTileProvider::Yandex ? 1 : 0);
-}
-
 void TFTView_Common::loadMap(void)
 {
-    ensureMapProviderDropdown();
 
     if (!map) {
 #if LV_USE_FS_ARDUINO_SD

@@ -248,8 +248,6 @@ class TFTView_Common : public MeshtasticView
     void addOrUpdateMap(uint32_t nodeNum, int32_t lat, int32_t lon);
     void removeFromMap(uint32_t nodeNum);
     void updateLocationMap(uint32_t objects);
-    void ensureMapProviderDropdown(void);
-
     // response callbacks
     void onTextMessageCallback(const ResponseHandler::Request &, ResponseHandler::EventType, int32_t);
     void onPositionCallback(const ResponseHandler::Request &, ResponseHandler::EventType, int32_t);
@@ -324,7 +322,6 @@ class TFTView_Common : public MeshtasticView
     static void ui_event_modem_preset_dropdown(lv_event_t *e);
     static void ui_event_setup_region_dropdown(lv_event_t *e);
     static void ui_event_map_style_dropdown(lv_event_t *e);
-    static void ui_event_map_provider_dropdown(lv_event_t *e);
     static void ui_event_calibration_screen_loaded(lv_event_t *e);
     static void ui_event_mesh_detector(lv_event_t *e);
     static void ui_event_mesh_detector_start(lv_event_t *e);
@@ -407,7 +404,6 @@ class TFTView_Common : public MeshtasticView
     std::array<lv_obj_t *, c_max_channels> ch_label;
     meshtastic_Channel *channel_scratch;
     lv_obj_t *qr;
-    lv_obj_t *mapProviderDropdown = nullptr;
     MapPanel *map = nullptr;
     std::unordered_map<uint32_t, lv_obj_t *> nodeObjects;
 
