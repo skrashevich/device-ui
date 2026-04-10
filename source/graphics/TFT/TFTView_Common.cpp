@@ -5349,6 +5349,14 @@ void TFTView_Common::loadMap(void)
 #else
         map = new MapPanel(objects.raw_map_panel, new URLService());
 #endif
+
+#if defined(VIEW_320x240) || defined(VIEW_240x320)
+        // populate url dropdown with built-in TileProvider templates
+        lv_dropdown_set_options(objects.map_url_dropdown, TileProvider::providers().c_str());
+        lv_dropdown_set_selected(objects.map_url_dropdown, TileProvider::selectedTemplate());
+        lv_obj_clear_flag(objects.map_url_dropdown, LV_OBJ_FLAG_HIDDEN);
+#endif
+
         map->setHomeLocationImage(objects.home_location_image);
         lv_obj_add_flag(objects.home_location_image, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(objects.home_location_image, ui_event_mapNodeButton, LV_EVENT_CLICKED, (void *)ownNode);
@@ -5445,9 +5453,7 @@ void TFTView_Common::loadMap(void)
                 MapTileSettings::setPrefix("/map");
                 MapTileSettings::setTileStyle("");
                 lv_obj_add_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
-#if defined(VIEW_320x240) || defined(VIEW_240x320)
-                lv_obj_add_flag(objects.map_url_dropdown, LV_OBJ_FLAG_HIDDEN);
-#endif
+                // map_url_dropdown stays visible so built-in providers remain selectable
             } else if (!mapStyles.empty()) {
                 // populate style dropdown
                 lv_obj_clear_flag(objects.map_style_dropdown, LV_OBJ_FLAG_HIDDEN);
