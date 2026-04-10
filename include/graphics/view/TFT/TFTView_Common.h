@@ -322,6 +322,7 @@ class TFTView_Common : public MeshtasticView
     static void ui_event_modem_preset_dropdown(lv_event_t *e);
     static void ui_event_setup_region_dropdown(lv_event_t *e);
     static void ui_event_map_style_dropdown(lv_event_t *e);
+    static void ui_event_map_url_dropdown(lv_event_t *e);
     static void ui_event_calibration_screen_loaded(lv_event_t *e);
     static void ui_event_mesh_detector(lv_event_t *e);
     static void ui_event_mesh_detector_start(lv_event_t *e);
