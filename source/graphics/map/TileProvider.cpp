@@ -6,7 +6,7 @@
 std::vector<std::tuple<std::string, std::string>> TileProvider::urlTemplates = {
     {"URL: OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"},
     {"URL: Yandex Maps",
-     "https://tiles.api-maps.yandex.ru/v1/tiles/?x={x}&y={y}&z={z}&l=map&lang=ru_RU&apikey=45735e54-8e67-4809-95b6-6cf1e13a4b6b"},
+     "https://tiles.api-maps.yandex.ru/v1/tiles/?projection=web_mercator&x={x}&y={y}&z={z}&l=map&lang=ru_RU&apikey=45735e54-8e67-4809-95b6-6cf1e13a4b6b"},
     {"URL: Google Maps", "https://mt0.google.com/vt?lyrs=m&x={x}&s=&y={y}&z={z}"}};
 
 std::string TileProvider::url(const char *filename)
