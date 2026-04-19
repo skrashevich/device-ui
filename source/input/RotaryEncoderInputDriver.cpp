@@ -6,10 +6,19 @@
 #include "input/I2CKeyboardInputDriver.h"
 #include "util/ILog.h"
 
+// BOOT button auto-configuration for T-LoRa-Pager-class boards (ESP32-S3 GPIO0).
+// Firmware may override by predefining INPUTDRIVER_BOOT_BTN_PIN before including.
+#if !defined(INPUTDRIVER_BOOT_BTN_PIN) && (defined(T_LORA_PAGER) || defined(T_PAGER))
+#define INPUTDRIVER_BOOT_BTN_PIN 0
+#endif
+
 // Static member initialization
 RotaryEncoder *RotaryEncoderInputDriver::rotary = nullptr;
 volatile int16_t RotaryEncoderInputDriver::encoderDiff = 0;
 uint32_t RotaryEncoderInputDriver::lastStepTime = 0;
+RotaryEncoderInputDriver::BootButtonCallback RotaryEncoderInputDriver::bootButtonCallback = nullptr;
+bool RotaryEncoderInputDriver::bootButtonPressed = false;
+uint32_t RotaryEncoderInputDriver::bootButtonLastChangeTime = 0;
 
 RotaryEncoderInputDriver::RotaryEncoderInputDriver(void) {}
 
@@ -59,10 +68,31 @@ void RotaryEncoderInputDriver::init(void)
               -1
 #endif
     );
+
+#ifdef INPUTDRIVER_BOOT_BTN_PIN
+    pinMode(INPUTDRIVER_BOOT_BTN_PIN, INPUT_PULLUP);
+    bootButtonPressed = (digitalRead(INPUTDRIVER_BOOT_BTN_PIN) == LOW);
+    bootButtonLastChangeTime = millis();
+    ILOG_INFO("RotaryEncoderInputDriver: BOOT button on pin %d", INPUTDRIVER_BOOT_BTN_PIN);
+#endif
 }
 
 void RotaryEncoderInputDriver::task_handler(void)
 {
+#ifdef INPUTDRIVER_BOOT_BTN_PIN
+    // Poll the auxiliary BOOT button independently of the rotary encoder so it works even
+    // if the quadrature encoder failed to initialise. Debounce: 40 ms edge lockout.
+    bool pressed = (digitalRead(INPUTDRIVER_BOOT_BTN_PIN) == LOW);
+    if (pressed != bootButtonPressed && (millis() - bootButtonLastChangeTime) > 40) {
+        bootButtonPressed = pressed;
+        bootButtonLastChangeTime = millis();
+        if (pressed && bootButtonCallback) {
+            lv_display_trigger_activity(NULL);
+            bootButtonCallback();
+        }
+    }
+#endif
+
     if (!rotary)
         return;
 
@@ -127,6 +157,8 @@ void RotaryEncoderInputDriver::encoder_read(lv_indev_t *indev, lv_indev_data_t *
         // Button was pressed and released - reset for next press
         rotary->resetButton();
         data->state = LV_INDEV_STATE_RELEASED;
+        // Short taps can skip BUTTON_PRESSED entirely; still mark activity so the screen wakes up
+        lv_display_trigger_activity(NULL);
     }
 #endif
 }

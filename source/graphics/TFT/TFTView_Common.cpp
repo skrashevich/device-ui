@@ -13,6 +13,9 @@
 #include "graphics/view/TFT/Themes.h"
 #include "images.h"
 #include "input/I2CKeyboardInputDriver.h"
+#ifdef INPUTDRIVER_ROTARY_TYPE
+#include "input/RotaryEncoderInputDriver.h"
+#endif
 #include "input/InputDriver.h"
 #include "lv_i18n.h"
 #include "lvgl_private.h"
@@ -1974,7 +1977,11 @@ void TFTView_Common::showMessagePopup(uint32_t from, uint32_t to, uint8_t ch, co
         if (THIS->db.module_config.external_notification.alert_message)
             lv_disp_trig_activity(NULL);
 
-        lv_group_focus_obj(objects.msg_popup_button);
+        // While the screen is locked, blank_screen_button must keep focus so a wheel click
+        // reaches ui_event_BlankScreenButton and sets screenUnlockRequest. Stealing focus here
+        // would route the click into msg_popup_button instead and the screen could not wake up.
+        if (!screenLocked)
+            lv_group_focus_obj(objects.msg_popup_button);
     }
 }
 
@@ -2078,6 +2085,9 @@ void TFTView_Common::ui_event_BlankScreenButton(lv_event_t *e)
     if (event_code == LV_EVENT_CLICKED) {
         ILOG_DEBUG("screen unlocked by button");
         screenUnlockRequest = true;
+        // Ensure the display driver leaves powersave on the next cycle even if the inactivity
+        // timer already expired before the click arrived.
+        lv_disp_trig_activity(NULL);
     }
 }
 
@@ -4869,6 +4879,20 @@ void TFTView_Common::ui_events_init(void)
             lv_group_focus_obj(objects.home_button);
         }
     });
+
+#ifdef INPUTDRIVER_ROTARY_TYPE
+    // BOOT button toggles the reboot/shutdown menu: press once to open, press again to dismiss.
+    RotaryEncoderInputDriver::setBootButtonCallback([]() {
+        if (!THIS)
+            return;
+        if (THIS->activeSettings == eReboot && objects.cancel_reboot_button) {
+            lv_obj_send_event(objects.cancel_reboot_button, LV_EVENT_CLICKED, NULL);
+        } else if (THIS->activeSettings == eNone && objects.basic_settings_reboot_button) {
+            lv_obj_send_event(objects.basic_settings_reboot_button, LV_EVENT_CLICKED, NULL);
+        }
+        // Any other activeSettings value: a different settings panel is open — ignore.
+    });
+#endif
 
     // Register callback for alt+encoder scrolling in active panel
     I2CKeyboardInputDriver::setScrollCallback([](int direction) {
