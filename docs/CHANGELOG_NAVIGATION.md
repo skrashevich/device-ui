@@ -1,157 +1,157 @@
-# Navigation Improvements for Non-Touch Devices
+# Улучшения навигации для устройств без сенсорного экрана
 
-## Summary
+## Итого
 
-5 source files changed, 236 lines added. Comprehensive navigation overhaul for T-Pager (480x222) and other non-touchscreen devices, enabling full rotary encoder and keyboard navigation with visual focus feedback.
+Изменено 5 исходных файлов, добавлено 236 строк. Полная переработка навигации для T-Pager (480×222) и других устройств без сенсорного экрана, обеспечивающая навигацию через ротарный энкодер и клавиатуру с визуальной индикацией фокуса.
 
-## Changes by File
+## Изменения по файлам
 
 ### RotaryEncoderInputDriver.h/cpp
 
-**Header change:**
-- Added static member `lastStepTime` for tracking encoder step intervals
+**Изменения в заголовке:**
+- Добавлен статический член `lastStepTime` для отслеживания интервалов шагов энкодера
 
-**Implementation changes:**
-- Encoder acceleration with speed-dependent multiplier
-  - Threshold <50ms → 4x multiplier
-  - Threshold <100ms → 2x multiplier
-  - Threshold >200ms → 1x multiplier (base)
-- Updated `task_handler()` to accumulate elapsed time between encoder steps
-- Acceleration transparent to upper layers—view code receives multiplied encoder values
+**Изменения в реализации:**
+- Ускорение энкодера с множителем, зависящим от скорости
+  - Порог <50 мс → множитель 4x
+  - Порог <100 мс → множитель 2x
+  - Порог >200 мс → множитель 1x (базовый)
+- Обновлён `task_handler()` для накопления прошедшего времени между шагами энкодера
+- Ускорение прозрачно для верхних уровней — код представления получает умноженные значения энкодера
 
 ### I2CKeyboardInputDriver.cpp
 
-**Sym modifier navigation layer:**
-- Added context-aware keyboard navigation in `TLoraPagerKeyboardInputDriver::readKeyboard()`
-- Blocks navigation when focused object is a textarea (preserves text input)
-- Maps 8 navigation keys through Sym modifier layer:
-  - Sym+Q (key '1') → HOME
-  - Sym+W (key '2') → UP
-  - Sym+E (key '3') → NEXT
-  - Sym+A (key '*') → LEFT
-  - Sym+S (key '/') → DOWN
-  - Sym+D (key '+') → RIGHT
-  - Sym+T (key '5') → ENTER
-  - Sym+F (key '-') → PREV
-- Navigation keys processed at input driver level, transparent to view code
+**Навигационный слой модификатора Sym:**
+- Добавлена контекстно-зависимая навигация с клавиатуры в `TLoraPagerKeyboardInputDriver::readKeyboard()`
+- Блокировка навигации при фокусе на textarea (сохраняет режим текстового ввода)
+- Маппинг 8 навигационных клавиш через слой модификатора Sym:
+  - Sym+Q (клавиша '1') → HOME
+  - Sym+W (клавиша '2') → UP
+  - Sym+E (клавиша '3') → NEXT
+  - Sym+A (клавиша '*') → LEFT
+  - Sym+S (клавиша '/') → DOWN
+  - Sym+D (клавиша '+') → RIGHT
+  - Sym+T (клавиша '5') → ENTER
+  - Sym+F (клавиша '-') → PREV
+- Навигационные клавиши обрабатываются на уровне драйвера ввода, прозрачно для кода представления
 
 ### Themes.cpp
 
-**Focus highlight theme layer:**
-- Registered universal focus theme chained on active display theme
-- Accent color #67EA94 (colorMesh green) applied across all widget types
-- 5 focused style objects initialized in `init_focus_styles_and_theme()`:
-  - **Button:** 2px green border with full opacity
-  - **Dropdown:** 2px green outline with full opacity
-  - **Slider knob:** 3px green outline
-  - **Textarea:** 2px green border
-  - **Switch:** 2px green outline
-- Automatic application via `focus_theme_apply_cb()` for buttons, dropdowns, sliders, textareas, switches
-- Theme chaining: new focus theme inherits parent theme's styles, adds focus-specific overrides
-- Works universally across VIEW_480x222 and VIEW_320x240 variants
+**Тема подсветки фокуса:**
+- Зарегистрирована универсальная тема фокуса, связанная с активной темой дисплея
+- Цвет акцента #67EA94 (colorMesh green) применяется ко всем типам виджетов
+- 5 объектов стилей фокуса инициализированы в `init_focus_styles_and_theme()`:
+  - **Кнопка:** зелёная рамка 2px с полной непрозрачностью
+  - **Dropdown:** зелёный контур 2px с полной непрозрачностью
+  - **Слайдер (knob):** зелёный контур 3px
+  - **Textarea:** зелёная рамка 2px
+  - **Switch:** зелёный контур 2px
+- Автоматическое применение через `focus_theme_apply_cb()` для кнопок, dropdown'ов, слайдеров, textarea'ов, switch'ей
+- Цепочка тем: новая тема фокуса наследует стили родительской темы, добавляя специфичные стили фокуса
+- Работает универсально для вариантов VIEW_480x222 и VIEW_320x240
 
 ### TFTView_480x222.cpp
 
-**Focus flags in `apply_hotfix()` (21 widgets added):**
-- Settings buttons (16): user, role, region, modem preset, channel, wifi, language, timeout, screen lock, brightness, theme, input, alert, backup/restore, reset, reboot
-- Settings panel widgets (8): dropdowns (device role, region, modem preset, language, theme, mouse input, reset, backup/restore), sliders (brightness, timeout, frequency slot), switches (screen lock, alert buzzer)
-- Map navigation buttons (8): arrow up/down/left/right, zoom in/out, GPS lock, nav button
-- All use `LV_OBJ_FLAG_SCROLL_ON_FOCUS` to ensure visibility when focused
+**Флаги фокуса в `apply_hotfix()` (21 виджет добавлен):**
+- Кнопки настроек (16): user, role, region, modem preset, channel, wifi, language, timeout, screen lock, brightness, theme, input, alert, backup/restore, reset, reboot
+- Виджеты панели настроек (8): dropdown'ы (device role, region, modem preset, language, theme, mouse input, reset, backup/restore), слайдеры (brightness, timeout, frequency slot), switch'и (screen lock, alert buzzer)
+- Кнопки навигации карты (8): стрелки вверх/вниз/влево/вправо, zoom in/out, GPS lock, nav button
+- Все используют `LV_OBJ_FLAG_SCROLL_ON_FOCUS` для обеспечения видимости при фокусировке
 
-**Screen navigation in `ui_events_init()` and `ui_event_GlobalKeyHandler()`:**
-- Registered `GlobalKeyHandler` on main_screen for LV_EVENT_KEY
-- Screen tab cycling via NEXT/PREV keys cycles through 6 main buttons: home → nodes → groups → messages → map → settings (wraps)
-- Disabled during active settings panels (checks `activeSettings != eNone`)
-- Uses `lv_event_send()` to trigger button click events for screen transitions
+**Навигация по экранам в `ui_events_init()` и `ui_event_GlobalKeyHandler()`:**
+- Зарегистрирован `GlobalKeyHandler` на main_screen для LV_EVENT_KEY
+- Циклическое переключение экранов через клавиши NEXT/PREV по 6 основным кнопкам: home → nodes → groups → messages → map → settings (с зацикливанием)
+- Отключено во время активных панелей настроек (проверка `activeSettings != eNone`)
+- Использует `lv_event_send()` для вызова событий нажатия кнопок при переходе между экранами
 
-**Node list page-jump in `ui_event_NodeButton()`:**
-- NEXT/PREV keys skip 5 nodes forward/backward for fast scrolling in large node lists
-- Applies `lv_obj_scroll_to_view()` after focus change to keep focused item visible
-- Works only when node list panel is active
+**Перелистывание по страницам в списке узлов `ui_event_NodeButton()`:**
+- Клавиши NEXT/PREV пропускают 5 узлов вперёд/назад для быстрой прокрутки больших списков
+- Применяет `lv_obj_scroll_to_view()` после смены фокуса для удержания выделенного элемента в поле зрения
+- Работает только когда активна панель списка узлов
 
-**Chat panel focus fix in `setGroupFocus()`:**
-- Fixed TODO: now correctly iterates children of chats_panel
-- Focuses first button child instead of failing to focus hardcoded index
-- Preserves focus behavior across varying chat counts
+**Исправление фокуса в панели чатов `setGroupFocus()`:**
+- Исправлен TODO: теперь корректно итерирует дочерние элементы chats_panel
+- Фокусирует первую дочернюю кнопку вместо попытки фокуса на жёстко заданный индекс
+- Сохраняет поведение фокуса при разном количестве чатов
 
-**Map panel focus:**
-- Now focuses nav_button when map_panel gains focus (was previously empty)
+**Фокус на панели карты:**
+- Теперь фокусирует nav_button при получении фокуса map_panel (раньше было пусто)
 
-**Scroll-to-view in 15 settings handlers:**
+**Прокрутка к видимости (scroll-to-view) в 15 обработчиках настроек:**
 - `ui_event_user_button()`, `ui_event_role_button()`, `ui_event_region_button()`
 - `ui_event_preset_button()`, `ui_event_wifi_button()`, `ui_event_language_button()`
 - `ui_event_channel_button()`, `ui_event_brightness_button()`, `ui_event_theme_button()`
 - `ui_event_timeout_button()`, `ui_event_screen_lock_button()`, `ui_event_input_button()`
 - `ui_event_alert_button()`, `ui_event_backup_button()`, `ui_event_reset_button()`
-- Each applies `lv_obj_scroll_to_view(focused_obj, LV_ANIM_ON)` after focus
+- Каждый применяет `lv_obj_scroll_to_view(focused_obj, LV_ANIM_ON)` после фокуса
 
-**Visual focus feedback in `addNode()` and `addChat()`:**
-- Node buttons: green border (2px, #67EA94) on LV_STATE_FOCUSED
-- Chat buttons: green border (2px, #67EA94) on LV_STATE_FOCUSED
-- Border styling applied only in focused state, no runtime overhead for unfocused items
+**Визуальная индикация фокуса в `addNode()` и `addChat()`:**
+- Кнопки узлов: зелёная рамка (2px, #67EA94) в состоянии LV_STATE_FOCUSED
+- Кнопки чатов: зелёная рамка (2px, #67EA94) в состоянии LV_STATE_FOCUSED
+- Стилизация рамки применяется только в состоянии фокуса, без затрат производительности для элементов без фокуса
 
-## Architecture Notes
+## Архитектурные заметки
 
-**Layered design:**
-- **Input drivers:** Keyboard and encoder acceleration/mapping (transparent to views)
-- **Theme layer:** Focus styles auto-applied via theme callback (no per-widget styling)
-- **View layer:** Navigation logic, scroll flags, focus management
-- **LVGL built-in:** `LV_OBJ_FLAG_SCROLL_ON_FOCUS` and `lv_obj_scroll_to_view()` handle scroll positioning automatically
+**Слоистый дизайн:**
+- **Драйверы ввода:** ускорение и маппинг клавиатуры и энкодера (прозрачно для представлений)
+- **Уровень тем:** стили фокуса автоматически применяются через callback темы (без стилизации каждого виджета)
+- **Уровень представлений:** логика навигации, флаги прокрутки, управление фокусом
+- **Встроенное в LVGL:** `LV_OBJ_FLAG_SCROLL_ON_FOCUS` и `lv_obj_scroll_to_view()` автоматически управляют позицией прокрутки
 
-**Focus flow:**
-1. Input driver processes encoder/keyboard → generates LV_KEY_* events
-2. Focused object receives LV_EVENT_KEY
-3. Event handlers navigate via `lv_group_focus_next/prev()` or direct `lv_group_focus_obj()`
-4. LVGL theme applies focus styles from `Themes.cpp` automatically
-5. View code ensures scroll-on-focus flags and scroll-to-view calls for all interactive elements
+**Поток фокуса:**
+1. Драйвер ввода обрабатывает энкодер/клавиатуру → генерирует события LV_KEY_*
+2. Элемент с фокусом получает LV_EVENT_KEY
+3. Обработчики событий навигируют через `lv_group_focus_next/prev()` или прямой `lv_group_focus_obj()`
+4. Тема LVGL автоматически применяет стили фокуса из `Themes.cpp`
+5. Код представления обеспечивает флаги scroll-on-focus и вызовы scroll-to-view для всех интерактивных элементов
 
-**Screen navigation design:**
-- Global key handler on main_screen catches NEXT/PREV at top level
-- Only active when `activeSettings == eNone` (no active sub-panel)
-- Prevents accidental screen switching while editing settings
-- Wrapping implemented via modulo arithmetic for seamless looping
+**Дизайн навигации по экранам:**
+- Глобальный обработчик клавиш на main_screen перехватывает NEXT/PREV на верхнем уровне
+- Активен только при `activeSettings == eNone` (нет активной подпанели)
+- Предотвращает случайное переключение экранов при редактировании настроек
+- Зацикливание реализовано через арифметику по модулю для бесшовного перехода
 
-**Performance considerations:**
-- Encoder multiplier computed only on step events (no per-frame overhead)
-- Focus styles registered once at init, reused across all widgets
-- Theme chaining avoids duplicate callbacks via parent theme check
-- Scroll-to-view calls use LVGL's built-in animation (not custom logic)
+**Соображения по производительности:**
+- Множитель энкодера вычисляется только при событиях шагов (без накладных расходов на каждый кадр)
+- Стили фокуса регистрируются один раз при инициализации и переиспользуются для всех виджетов
+- Цепочка тем избегает дублирования callback'ов через проверку родительской темы
+- Вызовы scroll-to-view используют встроенную анимацию LVGL (без пользовательской логики)
 
-## Testing Notes
+## Заметки по тестированию
 
-**Encoder acceleration:**
-- Rotate slowly: verify 1x multiplier (standard navigation)
-- Rotate at medium speed: verify 2x multiplier kicks in <100ms
-- Rotate rapidly: verify 4x multiplier kicks in <50ms
-- Test encoder wraparound at screen and list boundaries
+**Ускорение энкодера:**
+- Вращайте медленно: проверка множителя 1x (стандартная навигация)
+- Вращайте со средней скоростью: проверка множителя 2x при <100 мс
+- Вращайте быстро: проверка множителя 4x при <50 мс
+- Проверка зацикливания энкодера на границах экранов и списков
 
-**Keyboard navigation (Sym+WASD):**
-- Verify HOME/NEXT/PREV cycle through main screens correctly
-- Test text input: Sym+WASD should NOT navigate when textarea focused
-- Test all 8 key mappings respond correctly
-- Verify modifiers release properly after navigation key sent
+**Навигация клавиатурой (Sym+WASD):**
+- Проверка корректного переключения экранов через HOME/NEXT/PREV
+- Проверка текстового ввода: Sym+WASD НЕ должны навигировать при фокусе на textarea
+- Проверка всех 8 маппингов клавиш
+- Проверка корректного отпускания модификаторов после отправки навигационной клавиши
 
-**Focus visibility:**
-- Navigate through buttons, dropdowns, sliders, textareas, switches
-- Verify green focus border appears on all widget types
-- Verify focused widget scrolls into view automatically (especially in settings panels)
-- Test focus wrapping at list boundaries
-- Verify long node/chat lists page-jump (5-skip) works smoothly
+**Видимость фокуса:**
+- Навигация по кнопкам, dropdown'ам, слайдерам, textarea'ам, switch'ам
+- Проверка появления зелёной рамки фокуса на всех типах виджетов
+- Проверка автоматической прокрутки к виджету с фокусом (особенно в панелях настроек)
+- Проверка зацикливания фокуса на границах списков
+- Проверка плавного перелистывания по страницам (пропуск 5 элементов) в длинных списках узлов/чатов
 
-**Screen switching:**
-- Verify NEXT/PREV cycle through all 6 main screens
-- Verify cycling wraps in both directions
-- Verify no screen switching during active settings (`activeSettings != eNone`)
-- Test rapid NEXT/PREV presses don't cause focus loss
+**Переключение экранов:**
+- Проверка циклического переключения NEXT/PREV по всем 6 основным экранам
+- Проверка зацикливания в обоих направлениях
+- Проверка блокировки переключения экранов при активных настройках (`activeSettings != eNone`)
+- Проверка отсутствия потери фокуса при быстром нажатии NEXT/PREV
 
-**Visual consistency:**
-- Verify focus border color (#67EA94) consistent across all widget types
-- Verify focus outline shows on sliders without interfering with knob drag
-- Verify textareas show focus border without affecting text rendering
-- Verify dropdown outlines don't clip menu items
+**Визуальная согласованность:**
+- Проверка единообразия цвета рамки фокуса (#67EA94) на всех типах виджетов
+- Проверка отсутствия конфликта контура фокуса на слайдерах с перетаскиванием ползунка
+- Проверка корректного отображения рамки фокуса на textarea'ах без влияния на рендеринг текста
+- Проверка отсутствия обрезки элементов меню контуром dropdown'ов
 
-**Cross-device testing:**
-- Test on VIEW_480x222 (primary target)
-- Test on VIEW_320x240 (compact variant)
-- Verify focus styles render correctly at different resolutions
-- Verify scroll-to-view logic handles small screen heights gracefully
+**Кроссплатформенное тестирование:**
+- Тестирование на VIEW_480x222 (основная цель)
+- Тестирование на VIEW_320x240 (компактный вариант)
+- Проверка корректного рендеринга стилей фокуса на разных разрешениях
+- Проверка корректной работы логики scroll-to-view при малой высоте экрана

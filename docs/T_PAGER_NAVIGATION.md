@@ -1,143 +1,143 @@
-# T-Pager Navigation Guide
+# Руководство по навигации T-Pager
 
-## Overview
+## Обзор
 
-The T-Lora Pager is a handheld LoRa communication device with a 480x222 display and a 31-key TCA8418 keyboard. Navigation relies on keyboard shortcuts, a rotary encoder, and modifier keys. There is no touchscreen.
+T-Lora Pager — портативное LoRa-устройство для коммуникации с дисплеем 480×222 и 31-клавишной клавиатурой TCA8418. Навигация осуществляется через горячие клавиши, ротарный энкодер и модификаторы. Сенсорный экран отсутствует.
 
-## Hardware
+## Аппаратная часть
 
-- **Display**: 480x222 pixels
-- **Keyboard**: TCA8418 I2C keyboard controller with 31 keys
-- **Rotary Encoder**: Integrated for navigation and scrolling
-- **Layout**: 4 rows × 10 columns of keys
+- **Дисплей**: 480×222 пикселей
+- **Клавиатура**: I2C-контроллер TCA8418, 31 клавиша
+- **Ротарный энкодер**: встроенный, для навигации и прокрутки
+- **Раскладка**: 4 ряда × 10 колонок
 
-## Keyboard Layout
+## Раскладка клавиатуры
 
-The keyboard is organized in a QWERTY-style layout with multiple modifier states:
+Клавиатура организована в стиле QWERTY с несколькими слоями модификаторов:
 
 ```
-Row 1: Q  W  E  R  T  Y  U  I  O  P
-Row 2: A  S  D  F  G  H  J  K  L  Enter
-Row 3: Sym  Z  X  C  V  B  N  M  Backspace
-Row 4: Shift  Space
+Ряд 1: Q  W  E  R  T  Y  U  I  O  P
+Ряд 2: A  S  D  F  G  H  J  K  L  Enter
+Ряд 3: Sym  Z  X  C  V  B  N  M  Backspace
+Ряд 4: Shift  Пробел
 ```
 
-**Sym layer** (hold Sym, then press key):
+**Слой Sym** (нажать Sym, затем клавишу):
 ```
-Row 1: 1  2  3  4  5  6  7  8  9  0
-Row 2: *  /  +  -  =  :  '  "  @  Enter
-Row 3: Sym  _  $  ;  ?  !  ,  .  ESC
+Ряд 1: 1  2  3  4  5  6  7  8  9  0
+Ряд 2: *  /  +  -  =  :  '  "  @  Enter
+Ряд 3: Sym  _  $  ;  ?  !  ,  .  ESC
 ```
 
-### Key Modifiers
+### Модификаторы
 
-- **Shift**: One-shot modifier — produces uppercase letters or alternate symbols on the next key press
-- **Sym**: One-shot modifier — accesses the symbol layer and, outside text fields, triggers navigation shortcuts
-- **Sym+Shift**: Chord to toggle keyboard layout (EN/RU); there is no separate Alt key on T-Pager
+- **Shift**: однократный модификатор — выдаёт заглавную букву или альтернативный символ при следующем нажатии
+- **Sym**: однократный модификатор — открывает слой символов, а вне текстовых полей активирует навигационные горячие клавиши
+- **Sym+Shift**: аккорд для переключения раскладки (EN/RU); отдельная клавиша Alt на T-Pager отсутствует
 
-## Navigation Shortcuts (Sym + Key)
+## Навигационные горячие клавиши (Sym + клавиша)
 
-When the **Sym modifier** is held, letter keys produce navigation commands instead of text characters. This applies when NOT in a text input field.
+Когда модификатор **Sym** активен, буквенные клавиши вместо текста выполняют навигационные команды. Работает только **вне** текстовых полей ввода.
 
-| Shortcut | Sym-layer char | Action | LVGL Key | Use Case |
-|----------|---------------|--------|----------|----------|
-| Sym+Q | 1 | Go Home | LV_KEY_HOME | Jump to home screen |
-| Sym+W | 2 | Up | LV_KEY_UP | Move focus up in lists/menus |
-| Sym+E | 3 | Next Screen | LV_KEY_NEXT | Cycle through screens |
-| Sym+R | 4 | Back/Close | LV_KEY_ESC | Close dialog or cancel |
-| Sym+T | 5 | Confirm/Enter | LV_KEY_ENTER | Select/activate focused item |
-| Sym+A | * | Left | LV_KEY_LEFT | Move focus left |
-| Sym+S | / | Down | LV_KEY_DOWN | Move focus down in lists/menus |
-| Sym+D | + | Right | LV_KEY_RIGHT | Move focus right |
-| Sym+F | - | Previous Screen | LV_KEY_PREV | Cycle back through screens |
-| Backspace | — | Navigate Home | navigateHomeCallback | Go to home screen (outside text input) |
-| Sym+Shift | — | Toggle Layout | — | Switch between EN (Latin) and RU (Russian) keyboard layout |
+| Комбинация | Символ Sym-слоя | Действие | LVGL Key | Назначение |
+|------------|----------------|----------|----------|------------|
+| Sym+Q | 1 | Домой | LV_KEY_HOME | Перейти на главный экран |
+| Sym+W | 2 | Вверх | LV_KEY_UP | Перемещение фокуса вверх в списках/меню |
+| Sym+E | 3 | Следующий экран | LV_KEY_NEXT | Циклическое переключение экранов |
+| Sym+R | 4 | Назад/Закрыть | LV_KEY_ESC | Закрыть диалог или отменить |
+| Sym+T | 5 | Подтвердить | LV_KEY_ENTER | Выбрать/активировать элемент |
+| Sym+A | * | Влево | LV_KEY_LEFT | Перемещение фокуса влево |
+| Sym+S | / | Вниз | LV_KEY_DOWN | Перемещение фокуса вниз в списках/меню |
+| Sym+D | + | Вправо | LV_KEY_RIGHT | Перемещение фокуса вправо |
+| Sym+F | - | Предыдущий экран | LV_KEY_PREV | Обратное переключение экранов |
+| Backspace | — | На главный экран | navigateHomeCallback | Переход на Home (вне текстового ввода) |
+| Sym+Shift | — | Переключение раскладки | — | Переключение между EN (латиница) и RU (кириллица) |
 
-**Note**: Inside text input fields, Sym+key produces the corresponding symbol character (1, 2, 3, 4, 5, *, /, +, -) as defined by the symbol layer, not navigation commands. Backspace inside a text field deletes the character to the left of the cursor.
+**Примечание**: внутри текстовых полей Sym+клавиша вводит соответствующий символ (1, 2, 3, 4, 5, *, /, +, -) из слоя символов, а не навигационные команды. Backspace в текстовом поле удаляет символ слева от курсора.
 
-## Rotary Encoder
+## Ротарный энкодер
 
-The rotary encoder is the primary input device for precise navigation and scrolling.
+Ротарный энкодер — основное устройство ввода для точной навигации и прокрутки.
 
-### Encoder Actions
+### Действия энкодера
 
-- **Rotate Clockwise/Counter-Clockwise**: Navigate between UI elements with acceleration
-  - Slower rotation = slower navigation
-  - Faster rotation = faster scrolling (acceleration-based)
+- **Вращение по/против часовой стрелки**: навигация между элементами интерфейса с ускорением
+  - Медленное вращение = обычная навигация
+  - Быстрое вращение = ускоренная прокрутка (на основе ускорения)
 
-- **Press (Click)**: Confirm/Enter the currently focused element
+- **Нажатие (клик)**: подтверждение/ввод текущего выделенного элемента
 
-- **Sym+Rotate**: Scroll content within the active panel (nodes list, groups, messages, or settings) without changing focus
+- **Sym+вращение**: прокрутка содержимого внутри активной панели (списки узлов, групп, сообщений или настроек) без смены фокуса
 
-The encoder provides smooth control for navigating large lists, maps, and message threads.
+Энкодер обеспечивает плавное управление при навигации по большим спискам, картам и потокам сообщений.
 
-## Screen Navigation
+## Навигация по экранам
 
-### Screen Cycle
-The Sym+E and Sym+F shortcuts cycle through the main application screens in a loop:
+### Цикл экранов
+Комбинации Sym+E и Sym+F циклически переключают основные экраны приложения:
 
 ```
 Home → Nodes → Groups → Messages → Map → Settings → Home
 ```
 
-- **Sym+E**: Move to the next screen in the cycle
-- **Sym+F**: Move to the previous screen in the cycle
-- **Sym+Q**: Jump directly to Home (any screen)
+- **Sym+E**: перейти на следующий экран в цикле
+- **Sym+F**: перейти на предыдущий экран в цикле
+- **Sym+Q**: перейти напрямую на Home (с любого экрана)
 
-### Node List Screen
-- **Encoder Rotate**: Browse through node list entries
-- **Encoder Press**: Expand details for the selected node
-- **Tab (Sym+E)**: Page down by 5 nodes at a time
-- **Green Border**: Indicates the currently focused node
+### Экран Nodes (Узлы)
+- **Вращение энкодера**: просмотр записей в списке узлов
+- **Нажатие энкодера**: раскрыть детали выбранного узла
+- **Tab (Sym+E)**: пролистать на 5 узлов вперёд
+- **Зелёная рамка**: указывает на текущий выделенный узел
 
-### Map Screen
-- **Arrow Navigation**: Use Sym+A (Left), Sym+W (Up), Sym+S (Down), Sym+D (Right) to pan the map
-  - Arrow buttons on screen are also focusable via encoder/Tab navigation
-- **Zoom In**: Press Enter (or Sym+T) while on the map panel
-- **Zoom Out**: Press ESC (or Sym+R) while on the map panel
-- **Zoom Controls**: Focusable zoom in/out buttons also accessible through standard navigation (Tab, Encoder)
-- **Encoder Rotate**: Navigate between focusable map controls
+### Экран Map (Карта)
+- **Навигация стрелками**: Sym+A (влево), Sym+W (вверх), Sym+S (вниз), Sym+D (вправо) для панорамирования
+  - Кнопки-стрелки на экране также доступны для фокуса через энкодер/Tab
+- **Приближение**: нажать Enter (или Sym+T) на панели карты
+- **Отдаление**: нажать ESC (или Sym+R) на панели карты
+- **Элементы масштабирования**: кнопки zoom in/out доступны через стандартную навигацию (Tab, энкодер)
+- **Вращение энкодера**: навигация между элементами управления картой
 
-### Settings Screen
-- **Encoder Rotate**: Scroll through available settings
-- **Encoder Press**: Open the currently focused setting for editing
-- **Backspace**: Exit the setting without saving changes
-- **Auto-Scroll**: Encoder automatically scrolls to keep the focused setting visible in the viewport
+### Экран Settings (Настройки)
+- **Вращение энкодера**: прокрутка доступных настроек
+- **Нажатие энкодера**: открыть текущую настройку для редактирования
+- **Backspace**: выйти из настройки без сохранения
+- **Автопрокрутка**: энкодер автоматически прокручивает, чтобы выделенная настройка была видна
 
-### Chat & Messages Screen
-- **Encoder Rotate**: Select which chat conversation to view
-- **Encoder Press**: Open the selected chat
-- **Keyboard Input**: Type messages using the keyboard (letters, numbers, symbols)
-- **Enter (Sym+T)**: Send the composed message
-- **Backspace**: Delete text or exit compose mode
+### Экран Messages (Сообщения)
+- **Вращение энкодера**: выбор чата для просмотра
+- **Нажатие энкодера**: открыть выбранный чат
+- **Ввод с клавиатуры**: набор сообщений (буквы, цифры, символы)
+- **Enter (Sym+T)**: отправить сообщение
+- **Backspace**: удалить текст или выйти из режима ввода
 
-## Text Input Mode
+## Режим текстового ввода
 
-When in a text field or compose box:
+Когда фокус находится в текстовом поле или области ввода:
 
-- **Regular keys** (A-Z, 0-9): Insert the corresponding character
-- **Shift+key**: Produce uppercase letters or alternate character
-- **Sym+key**: Produce symbols (1, 2, 3, *, /, +, 5, -, etc.)
-- **Backspace**: Delete the character to the left of the cursor
-- **Enter (Sym+T)**: Send message or confirm input (context-dependent)
-- **Navigation keys do NOT function in text input mode** — only character input is processed
+- **Обычные клавиши** (A-Z, 0-9): вставка соответствующего символа
+- **Shift+клавиша**: заглавная буква или альтернативный символ
+- **Sym+клавиша**: спецсимволы (1, 2, 3, *, /, +, 5, -, и т.д.)
+- **Backspace**: удаление символа слева от курсора
+- **Enter (Sym+T)**: отправить сообщение или подтвердить ввод (зависит от контекста)
+- **Навигационные клавиши НЕ работают в режиме текстового ввода** — обрабатывается только символьный ввод
 
-## Keyboard Layout Toggle
+## Переключение раскладки клавиатуры
 
-The T-Pager supports both English (Latin) and Russian (Cyrillic) keyboard layouts.
+T-Pager поддерживает раскладки: English (латиница) и Russian (кириллица).
 
-- **Toggle Layout**: Press Sym, then press Shift (chord — both must be pressed within the same modifier window)
-- **Layout Change**: After the chord, the keyboard layout switches
-  - EN mode: QWERTY with standard Latin characters and symbols
-  - RU mode: Phonetic Cyrillic mapping via ЙЦУКЕН (Q→й, W→ц, E→у, R→к, T→е, etc.)
-- **Cooldown**: Layout changes have a 700ms debounce to prevent accidental re-triggers
+- **Переключение**: нажать Sym, затем Shift (аккорд — оба должны быть нажаты в одном окне модификатора)
+- **Смена раскладки**: после аккорда раскладка переключается
+  - EN: QWERTY со стандартными латинскими символами
+  - RU: ЙЦУКЕН — фонетическая кириллическая раскладка (Q→й, W→ц, E→у, R→к, T→е и т.д.)
+- **Cooldown**: смена раскладки имеет задержку 700 мс для предотвращения случайных повторных переключений
 
-### Russian letters only accessible via Sym layer (RU mode)
+### Русские буквы, доступные только через слой Sym (режим RU)
 
-Seven Cyrillic letters have no direct key on the 31-key layout and are entered using Sym+key in RU mode:
+Семь кириллических букв не имеют прямой клавиши на 31-клавишной раскладке и вводятся через Sym+клавиша в режиме RU:
 
-| Shortcut | Russian letter |
-|----------|---------------|
+| Комбинация | Русская буква |
+|-----------|--------------|
 | Sym+G (=) | ё |
 | Sym+H (:) | х |
 | Sym+J (') | э |
@@ -146,25 +146,25 @@ Seven Cyrillic letters have no direct key on the 31-key layout and are entered u
 | Sym+N (,) | б |
 | Sym+M (.) | ю |
 
-## Accessibility
+## Доступность
 
-- **No Touchscreen**: All navigation is keyboard and encoder-based
-- **Accelerated Scrolling**: Faster encoder rotation provides faster navigation through long lists
-- **Consistent Navigation Model**: LVGL key codes ensure consistent behavior across all screens
-- **Modifier Awareness**: The device is context-aware — Sym+key behaves differently in text input vs. navigation mode
+- **Без сенсорного экрана**: вся навигация через клавиатуру и энкодер
+- **Ускоренная прокрутка**: быстрое вращение энкодера ускоряет навигацию по длинным спискам
+- **Единая модель навигации**: коды клавиш LVGL обеспечивают единообразное поведение на всех экранах
+- **Контекстная осведомлённость**: устройство учитывает контекст — Sym+клавиша ведёт себя по-разному в текстовом вводе и в навигации
 
-## Tips & Tricks
+## Советы
 
-1. **Quick Navigation**: Use Sym+Q to instantly return to the home screen from any location
-2. **Screen Cycling**: Sym+E/F lets you quickly browse between screens without memorizing each screen's navigation layout
-3. **Encoder Acceleration**: Spin the encoder faster to scroll through large lists more quickly
-4. **Text Editing**: Once in a text field, use Backspace to delete characters — navigation keys are not available
-5. **Map Interaction**: Use the encoder to scroll zoom/pan controls into focus, then press to activate
-6. **Layout Persistence**: The keyboard layout (EN/RU) persists until toggled again — your language preference carries across all screens
+1. **Быстрая навигация**: Sym+Q мгновенно возвращает на главный экран из любого места
+2. **Переключение экранов**: Sym+E/F позволяет быстро перемещаться между экранами без запоминания навигации каждого экрана
+3. **Ускорение энкодера**: быстрое вращение энкодера ускоряет прокрутку длинных списков
+4. **Редактирование текста**: в текстовом поле используйте Backspace для удаления — навигационные клавиши недоступны
+5. **Работа с картой**: используйте энкодер для фокуса на элементах управления zoom/pan, затем нажмите для активации
+6. **Сохранение раскладки**: раскладка (EN/RU) сохраняется до следующего переключения — выбор языка действует на всех экранах
 
 ---
 
-**Device**: T-Lora Pager
-**Display Resolution**: 480×222
-**Keyboard Controller**: TCA8418
-**Last Updated**: 2026-03-16
+**Устройство**: T-Lora Pager
+**Разрешение дисплея**: 480×222
+**Контроллер клавиатуры**: TCA8418
+**Последнее обновление**: 2026-04-20
