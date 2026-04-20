@@ -1,15 +1,11 @@
 {
   // See https://code.visualstudio.com/docs/getstarted/settings#_settings-json-file
   // for the documentation about the settings.json format.
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io",
-  "trunk.enableWindows": true,
+  "editor.formatOnSave": false,
   "files.insertFinalNewline": false,
   "files.trimFinalNewlines": false,
   "cmake.configureOnOpen": false,
-  "[cpp]": {
-    "editor.defaultFormatter": "trunk.io"
-  },
+  "[cpp]": {},
   "testMate.cpp.test.executables": "${workspaceFolder}/build/bin/tests",
   "testMate.cpp.discovery.loadOnStartup": true,
   "cmake.ctest.testExplorerIntegrationEnabled": false

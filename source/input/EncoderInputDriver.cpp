@@ -48,6 +48,8 @@ void EncoderInputDriver::encoder_read(lv_indev_t *indev, lv_indev_data_t *data)
 {
     // encoder w/o interrupts but read GPIOs directly
     if (INPUTDRIVER_ENCODER_TYPE == 1) {
+        static uint32_t prevkey1 = 0;
+
 #ifdef INPUTDRIVER_ENCODER_LEFT
         if (digitalRead(INPUTDRIVER_ENCODER_LEFT))
             data->enc_diff = -1;
@@ -57,10 +59,17 @@ void EncoderInputDriver::encoder_read(lv_indev_t *indev, lv_indev_data_t *data)
             data->enc_diff = 1;
 #endif
 #ifdef INPUTDRIVER_ENCODER_BTN
-        // FIXME: need same logix as below to trigger LONG_PRESSED events
         if (!digitalRead(INPUTDRIVER_ENCODER_BTN)) {
             data->key = LV_KEY_ENTER;
             data->state = LV_INDEV_STATE_PRESSED;
+            prevkey1 = LV_KEY_ENTER;
+        } else {
+            // this logic is required for LONG_PRESSED event, see lv_indev.c
+            if (prevkey1 != 0) {
+                data->state = LV_INDEV_STATE_RELEASED;
+                data->key = prevkey1;
+                prevkey1 = 0;
+            }
         }
 #endif
     }

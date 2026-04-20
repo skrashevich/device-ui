@@ -15,6 +15,13 @@ class Themes
     static void recolorTopLabel(lv_obj_t *obj, bool alert);
     static void recolorTableRow(lv_draw_fill_dsc_t *fill_draw_dsc, bool odd);
 
+    // Focus styles for encoder/keyboard navigation (green #67EA94 highlight)
+    static lv_style_t *getFocusStyleBtn(void);
+    static lv_style_t *getFocusStyleDropdown(void);
+    static lv_style_t *getFocusStyleSliderKnob(void);
+    static lv_style_t *getFocusStyleTextarea(void);
+    static lv_style_t *getFocusStyleSwitch(void);
+
   private:
     Themes(void) = default;
 };

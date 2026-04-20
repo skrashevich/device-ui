@@ -123,7 +123,8 @@ template <class LGFX> void LGFXDriver<LGFX>::task_handler(void)
 #endif
                     }
                     if ((pin_int >= 0 && DisplayDriver::view->sleep(pin_int)) ||
-                        (screenTimeout + 50 > lv_display_get_inactive_time(NULL) && !DisplayDriver::view->isScreenLocked())) {
+                        (screenTimeout + 50 > lv_display_get_inactive_time(NULL) &&
+                         (!DisplayDriver::view->isScreenLocked() || pin_int < 0))) {
                         delay(2); // let the CPU finish to restore all register in case of light sleep
                         // woke up by touch or button
                         ILOG_INFO("leaving powersave");
@@ -277,7 +278,7 @@ template <class LGFX> void LGFXDriver<LGFX>::init(DeviceGUI *gui)
 #else
     bufsize = lgfx->screenWidth * lgfx->screenHeight * sizeof(lv_color_t) / 4;
 #endif
-    ILOG_DEBUG("LVGL: allocating %u bytes PSRAM for draw buffer", bufsize);
+    ILOG_DEBUG("LVGL: allocating %u bytes PSRAM for draw buffer (max free PSRAM: %u)", bufsize, ESP.getMaxAllocPsram());
     buf1 = (lv_color_t *)LV_MEM_POOL_ALLOC(bufsize);
     assert(buf1 != 0);
     lv_display_set_buffers(this->display, buf1, buf2, bufsize, LV_DISPLAY_RENDER_MODE_PARTIAL);

@@ -122,6 +122,7 @@ void KeyMatrixInputDriver::keyboard_read(lv_indev_t *indev, lv_indev_data_t *dat
                 break;
             }
             data->state = LV_INDEV_STATE_PRESSED;
+            lv_display_trigger_activity(NULL);
             ILOG_DEBUG("Key 0x%x pressed", data->key);
         } else {
             if (prevkey != 0) {

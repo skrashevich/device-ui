@@ -1,37 +1,36 @@
 #pragma once
 
-#include "graphics/common/MeshtasticView.h"
+#include "graphics/view/TFT/TFTView_Common.h"
 
 /**
- * @brief GUI view for e.g. unPhone or WT32-SC01 Plus
- * Handles creation of display driver and controller.
+ * @brief GUI view for T-Lora Pager (480x222 display)
+ * Inherits shared functionality from TFTView_Common.
  * Note: due to static callbacks in lvgl this class is modelled as
  *       a singleton with static callback members
  */
-class TFTView_480x222 : public MeshtasticView
+class TFTView_480x222 : public TFTView_Common
 {
   public:
-    void init(IClientBase *client) override;
-    void task_handler(void) override;
-
-    void addOrUpdateNode(uint32_t nodeNum, uint8_t channel, uint32_t lastHeard, const meshtastic_User &cfg) override {}
-    void addNode(uint32_t nodeNum, uint8_t channel, const char *userShort, const char *userLong, uint32_t lastHeard, eRole role,
-                 bool hasKey, bool viaMqtt) override
-    {
-    }
-    void updateNode(uint32_t nodeNum, uint8_t channel, const meshtastic_User &cfg) override {}
-
-  protected:
-    virtual void addMessage(char *msg) {}
-    virtual void newMessage(uint32_t nodeNum, lv_obj_t *container, uint8_t channel, const char *msg) {}
 
   private:
     // view creation only via ViewFactory
     friend class ViewFactory;
     static TFTView_480x222 *instance(void);
     static TFTView_480x222 *instance(const DisplayDriverConfig &cfg);
-    TFTView_480x222();
     TFTView_480x222(const DisplayDriverConfig *cfg, DisplayDriver *driver);
+
+    // view-specific virtual overrides
+    void configureKeyboardLayouts() override;
+    void ui_set_active(lv_obj_t *b, lv_obj_t *p, lv_obj_t *tp) override;
+    void onEventsInitExtra() override;
+    void onInitScreensExtra() override;
+    void onNewMessageExtra(uint32_t from, bool isDM) override;
+    void onUnreadMessagesUpdated() override;
+    int getExitCode() override { return 0; }
+
+    // view-specific static callbacks
+    static void ui_event_MainButtonFocus(lv_event_t *e);
+    static void ui_event_GlobalKeyHandler(lv_event_t *e);
 
     static TFTView_480x222 *gui;
 };

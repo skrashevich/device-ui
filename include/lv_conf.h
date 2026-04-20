@@ -378,7 +378,7 @@
  *If size is not set to 0, the decoder will fail to decode when the cache is full.
  *If size is 0, the cache function is not enabled and the decoded mem will be released immediately after use.*/
 #ifndef LV_CACHE_DEF_SIZE
-#define LV_CACHE_DEF_SIZE       1572864 /* 6 tiles a 192kB */
+#define LV_CACHE_DEF_SIZE       786432 /* 3 tiles a 192kB - reduced for ESP32 memory */
 #endif
 
 /*Default number of image header cache entries. The cache is used to store the headers of images

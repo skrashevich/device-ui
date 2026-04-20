@@ -11,10 +11,10 @@
 <!--Project specific badges here-->
 
 <p align="center">
-<a href="">
-    <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/meshtastic/device-ui"></a>
-    <a href="https://github.com/meshtastic/device-ui/issues">
-    <img alt="GitHub issues" src="https://img.shields.io/github/issues/meshtastic/device-ui"></a>
+<a href="https://github.com/skrashevich/device-ui/commits/master">
+    <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/skrashevich/device-ui"></a>
+    <a href="https://github.com/skrashevich/device-ui/issues">
+    <img alt="GitHub issues" src="https://img.shields.io/github/issues/skrashevich/device-ui"></a>
   <a href="https://opencollective.com/meshtastic">
     <img alt="Open Collective backers" src="https://img.shields.io/opencollective/backers/meshtastic?label=support%20meshtastic">
   </a>
@@ -40,6 +40,20 @@ This C++ library is intended to support the following scenarios with enhanced sc
 Vectors and icons by <a href="https://www.svgrepo.com/" target="_blank">SVG Repo</a><br>
 Graphics using <a href="https://lvgl.io/" target="_blank">LVGL</a> library
 </p>
+
+## :twisted_rightwards_arrows: Fork Status
+
+This repository is a fork of [meshtastic/device-ui](https://github.com/meshtastic/device-ui).
+It tracks upstream updates and contains fork-specific changes focused on map loading and T-Deck keyboard usability.
+
+### Fork-specific changes
+
+- Added online map tile loading over WLAN/HTTPS via `URLService` (OpenStreetMap tile hosts) as a backup source for map tiles.
+- Improved map tile loading behavior in `TFTView_320x240` for online tile availability and map controls.
+- Added Russian keyboard support for T-Deck:
+  - RU/EN virtual keyboard layouts with Cyrillic symbols.
+  - Latin-to-Cyrillic mapping for hardware keyboard input in focused text areas.
+  - Keyboard layout toggle using `Left Shift + Mic button` with explicit layout state synchronization.
 
 ## :pencil: TODOs
 
@@ -132,7 +146,7 @@ Graphics using <a href="https://lvgl.io/" target="_blank">LVGL</a> library
     - [x] Map
       - [x] Tiles dynamic loading
         - [x] SD card
-        - [ ] WLAN
+        - [x] WLAN
       - [x] Pan & Zoom
       - [x] Node locations
       - [ ] Location precision
@@ -179,6 +193,19 @@ Graphics using <a href="https://lvgl.io/" target="_blank">LVGL</a> library
     - [x] disable screen to temporarily allow other connection (USB serial, BT) to the device
     - [x] allow bluetooth connection via 'Programming Mode'
     - [ ] I2S Audio support
+
+### :pager: T-Lora Pager
+
+    - [x] Firmware project integration
+    - [x] T-Pager UI
+      - [x] 480x222 display view
+      - [x] TCA8418 keyboard input handling
+      - [x] Rotary encoder support with acceleration
+      - [x] Keyboard layout toggle (EN/RU)
+    - [x] I2C keyboard controller support
+    - [x] Non-touchscreen keyboard-driven navigation
+
+For detailed keyboard shortcuts and encoder navigation, see [T-Pager Navigation Guide](docs/T_PAGER_NAVIGATION.md).
 
 ### :pager: DIY Mesh-Tab (see <a href="[https://github.com/valzzu/Mesh-Tab]" target="_blank">https://github.com/valzzu/Mesh-Tab</a>)
 

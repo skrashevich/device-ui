@@ -36,7 +36,7 @@
 #ifdef T_DECK
 #include "graphics/LGFX/LGFX_T_DECK.h"
 #endif
-#ifdef T_LORA_PAGER
+#if defined(T_LORA_PAGER) || defined(T_PAGER)
 #include "graphics/LGFX/LGFX_T_LORA_PAGER.h"
 #endif
 #ifdef PICOMPUTER_S3
@@ -141,7 +141,7 @@ DisplayDriver *DisplayDriverFactory::create(const DisplayDriverConfig &cfg)
     case DisplayDriverConfig::device_t::TDECK:
         return new LGFXDriver<LGFX_TDECK>(cfg.width(), cfg.height());
         break;
-#elif defined(T_LORA_PAGER)
+#elif defined(T_LORA_PAGER) || defined(T_PAGER)
     case DisplayDriverConfig::device_t::TLORA_PAGER:
         return new LGFXDriver<LGFX_TLORA_PAGER>(cfg.width(), cfg.height());
         break;
