@@ -3,6 +3,7 @@
 #include "util/ILog.h"
 #include <Arduino.h>
 #include <Wire.h>
+#include <cstddef>
 
 #ifdef DEVICEUI_TDECK_KEYLOG
 #include <cstdarg>
@@ -51,9 +52,11 @@ constexpr uint32_t TDECK_RIGHT_SHIFT_HID_KEY = 0x85;
 constexpr uint32_t TDECK_RIGHT_ALT_HID_KEY = 0x86;
 constexpr uint32_t TDECK_LAYOUT_CHORD_WINDOW_MS = 400;
 constexpr uint32_t TDECK_LAYOUT_TOGGLE_COOLDOWN_MS = 700;
+constexpr uint32_t TDECK_DOUBLE_SPACE_WINDOW_MS = 450;
 uint32_t tdeckLastLeftShiftMs = 0;
 uint32_t tdeckLastLeftAltMs = 0;
 uint32_t tdeckLastLayoutToggleMs = 0;
+uint32_t tdeckLastSpaceMs = 0;
 
 const char *mapLatinToRussianUtf8(uint32_t key)
 {
@@ -195,29 +198,120 @@ const char *mapLatinToRussianUtf8(uint32_t key)
     }
 }
 
-bool insertIntoFocusedTextarea(const char *text)
+lv_obj_t *getFocusedTextarea()
 {
 #if LV_USE_TEXTAREA
     lv_group_t *group = InputDriver::getInputGroup();
-    if (!group || !text) {
-        return false;
+    if (!group) {
+        return nullptr;
     }
 
     lv_obj_t *focused = lv_group_get_focused(group);
     if (!focused) {
-        return false;
+        return nullptr;
     }
 
     if (!lv_obj_check_type(focused, &lv_textarea_class)) {
+        return nullptr;
+    }
+
+    return focused;
+#else
+    return nullptr;
+#endif
+}
+
+bool insertIntoFocusedTextarea(const char *text)
+{
+    lv_obj_t *focused = getFocusedTextarea();
+    if (!focused || !text) {
         return false;
     }
 
     lv_textarea_add_text(focused, text);
     return true;
+}
+
+size_t utf8ByteIndexFromCharIndex(const char *text, uint32_t charIndex)
+{
+    size_t byteIndex = 0;
+    uint32_t charsSeen = 0;
+
+    while (text && text[byteIndex] != '\0' && charsSeen < charIndex) {
+        uint8_t c = static_cast<uint8_t>(text[byteIndex]);
+        if ((c & 0x80) == 0x00) {
+            byteIndex += 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            byteIndex += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            byteIndex += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            byteIndex += 4;
+        } else {
+            // Invalid lead byte, keep moving to avoid getting stuck.
+            byteIndex += 1;
+        }
+        charsSeen++;
+    }
+
+    return byteIndex;
+}
+
+bool replacePreviousSpaceWithDotInFocusedTextarea()
+{
+#if LV_USE_TEXTAREA
+    lv_obj_t *focused = getFocusedTextarea();
+    if (!focused) {
+        return false;
+    }
+
+    const char *text = lv_textarea_get_text(focused);
+    if (!text) {
+        return false;
+    }
+
+    uint32_t cursorPos = lv_textarea_get_cursor_pos(focused);
+    if (cursorPos == 0) {
+        return false;
+    }
+
+    size_t prevCharByteIndex = utf8ByteIndexFromCharIndex(text, cursorPos - 1);
+    if (text[prevCharByteIndex] != ' ') {
+        return false;
+    }
+
+    lv_textarea_delete_char(focused);
+    lv_textarea_add_text(focused, ".");
+    return true;
 #else
-    (void)text;
     return false;
 #endif
+}
+
+bool handleDoubleSpaceShortcut(uint32_t key)
+{
+    if (key != ' ') {
+        tdeckLastSpaceMs = 0;
+        return false;
+    }
+
+    uint32_t now = millis();
+    if (tdeckLastSpaceMs != 0 && (now - tdeckLastSpaceMs) <= TDECK_DOUBLE_SPACE_WINDOW_MS) {
+        tdeckLastSpaceMs = 0;
+        if (replacePreviousSpaceWithDotInFocusedTextarea()) {
+            TDECK_KEY_LOG("double-space shortcut -> '.'");
+            return true;
+        }
+        return false;
+    }
+
+    tdeckLastSpaceMs = now;
+    return false;
+}
+
+void resetDoubleSpaceShortcutState()
+{
+    tdeckLastSpaceMs = 0;
 }
 
 bool isLeftShiftModifier(uint32_t key)
@@ -285,6 +379,8 @@ bool handleLayoutToggleChord(uint32_t key)
         TDECK_KEY_LOG("layout toggled by Alt+Shift -> %s", ru ? "RU" : "EN");
     }
 
+    // Modifiers/chords are not text input, so break "double-space" sequence.
+    resetDoubleSpaceShortcutState();
     // Consume modifier key events, they should not be forwarded as text/navigation keys.
     return true;
 }
@@ -403,7 +499,7 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
     (void)indev;
     uint32_t keyValue = 0;
     data->state = LV_INDEV_STATE_RELEASED;
-    uint8_t bytes = Wire.requestFrom(address, 1);
+    uint8_t bytes = Wire.requestFrom(static_cast<uint8_t>(address), static_cast<uint8_t>(1));
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
         TDECK_KEY_LOG("raw key from i2c addr=0x%02X: 0x%02X (%u)", (unsigned int)address, (unsigned int)keyValue,
@@ -417,6 +513,11 @@ void TDeckKeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, 
             data->state = LV_INDEV_STATE_PRESSED;
             ILOG_DEBUG("key press value: %d", (int)keyValue);
             TDECK_KEY_LOG("forward key to lvgl: 0x%02X (%u)", (unsigned int)keyValue, (unsigned int)keyValue);
+
+            if (handleDoubleSpaceShortcut(keyValue)) {
+                keyValue = 0;
+                data->state = LV_INDEV_STATE_RELEASED;
+            }
 
             switch (keyValue) {
             case 0x0D:
@@ -830,7 +931,7 @@ void BBQ10KeyboardInputDriver::init(void)
 void BBQ10KeyboardInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
     char keyValue = 0;
-    uint8_t bytes = Wire.requestFrom(address, 1);
+    uint8_t bytes = Wire.requestFrom(static_cast<uint8_t>(address), static_cast<uint8_t>(1));
     if (Wire.available() > 0 && bytes > 0) {
         keyValue = Wire.read();
         // ignore empty reads and keycode 224(E0, shift-0 on T-Deck) which causes internal issues
@@ -862,7 +963,7 @@ CardKBInputDriver::CardKBInputDriver(uint8_t address)
 void CardKBInputDriver::readKeyboard(uint8_t address, lv_indev_t *indev, lv_indev_data_t *data)
 {
     char keyValue = 0;
-    Wire.requestFrom(address, 1);
+    Wire.requestFrom(static_cast<uint8_t>(address), static_cast<uint8_t>(1));
     if (Wire.available() > 0) {
         keyValue = Wire.read();
         // ignore empty reads and keycode 224 which causes internal issues
