@@ -303,6 +303,7 @@ void TFTView_320x240::ui_event_GlobalKeyHandler(lv_event_t *e)
     }
 }
 
+#if 0
 void TFTView_320x240::ui_event_trace_route_node(lv_event_t *e)
 {
     // navigate to node in node list
@@ -4420,6 +4421,8 @@ void TFTView_320x240::updateNodesStatus(void)
     lv_snprintf(buf, sizeof(buf), _p("%d of %d nodes online", nodeCount), nodesOnline, nodeCount);
     lv_label_set_text(objects.home_nodes_label, buf);
 }
+
+#endif // why not :))) 
 
 int TFTView_320x240::getChannelButtonWidth()
 {
