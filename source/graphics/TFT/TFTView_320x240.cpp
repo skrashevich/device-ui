@@ -303,8 +303,8 @@ void TFTView_320x240::ui_event_GlobalKeyHandler(lv_event_t *e)
     }
 }
 
-#if 0
-date signal strength text and image for home screen
+/**
+ * update signal strength text and image for home screen
  */
 void TFTView_320x240::updateSignalStrength(int32_t rssi, float snr)
 {
@@ -1329,7 +1329,7 @@ void TFTView_320x240::restore(uint32_t option)
  * calculate percentage value from rssi and snr
  * Note: ranges are based on the axis values of the signal scanner
  */
- ---- module updates ----
+// ---- time updates ----
 void TFTView_320x240::updateTime(uint32_t timeVal)
 {
     time_t localtime;
@@ -1894,8 +1894,6 @@ void TFTView_320x240::updateNodesStatus(void)
     lv_snprintf(buf, sizeof(buf), _p("%d of %d nodes online", nodeCount), nodesOnline, nodeCount);
     lv_label_set_text(objects.home_nodes_label, buf);
 }
-
-#endif // why not :))) 
 
 int TFTView_320x240::getChannelButtonWidth()
 {
